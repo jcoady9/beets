@@ -367,6 +367,35 @@ def input_yn(prompt, require=False):
     return sel == 'y'
 
 
+def input_select_objects(prompt, objs, rep):
+    """Prompt to user to choose all, none, or some of the given objects.
+    Return the list of selected objects.
+
+    `prompt` is the prompt string to use for each question (it should be
+    phrased as an imperative verb). `rep` is a function to call on each
+    object to print it out when confirming objects individually.
+    """
+    choice = input_options(
+        ('y', 'n', 's'), False,
+        '%s? (Yes/no/select)' % prompt)
+    print()  # Blank line.
+
+    if choice == 'y':  # Yes.
+        return objs
+
+    elif choice == 's':  # Select.
+        out = []
+        for obj in objs:
+            rep(obj)
+            if input_yn('%s? (yes/no)' % prompt, True):
+                out.append(obj)
+            print()  # go to a new line
+        return out
+
+    else:  # No.
+        return []
+
+
 # Human output formatting.
 
 def human_bytes(size):
