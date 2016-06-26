@@ -16,8 +16,7 @@
 """Uses user-specified rewriting rules to canonicalize names for path
 formats.
 """
-from __future__ import (division, absolute_import, print_function,
-                        unicode_literals)
+from __future__ import division, absolute_import, print_function
 
 import re
 from collections import defaultdict
@@ -52,13 +51,13 @@ class RewritePlugin(BeetsPlugin):
         # Gather all the rewrite rules for each field.
         rules = defaultdict(list)
         for key, view in self.config.items():
-            value = view.get(unicode)
+            value = view.as_str()
             try:
                 fieldname, pattern = key.split(None, 1)
             except ValueError:
-                raise ui.UserError("invalid rewrite specification")
+                raise ui.UserError(u"invalid rewrite specification")
             if fieldname not in library.Item._fields:
-                raise ui.UserError("invalid field name (%s) in rewriter" %
+                raise ui.UserError(u"invalid field name (%s) in rewriter" %
                                    fieldname)
             self._log.debug(u'adding template field {0}', key)
             pattern = re.compile(pattern.lower())
@@ -69,7 +68,7 @@ class RewritePlugin(BeetsPlugin):
                 rules['albumartist'].append((pattern, value))
 
         # Replace each template field with the new rewriter function.
-        for fieldname, fieldrules in rules.iteritems():
+        for fieldname, fieldrules in rules.items():
             getter = rewriter(fieldname, fieldrules)
             self.template_fields[fieldname] = getter
             if fieldname in library.Album._fields:

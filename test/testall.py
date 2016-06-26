@@ -15,8 +15,7 @@
 # The above copyright notice and this permission notice shall be
 # included in all copies or substantial portions of the Software.
 
-from __future__ import (division, absolute_import, print_function,
-                        unicode_literals)
+from __future__ import division, absolute_import, print_function
 
 import os
 import re
@@ -27,13 +26,6 @@ from test._common import unittest
 pkgpath = os.path.dirname(__file__) or '.'
 sys.path.append(pkgpath)
 os.chdir(pkgpath)
-
-# Make sure we use local version of beetsplug and not system namespaced version
-# for tests
-try:
-    del sys.modules["beetsplug"]
-except KeyError:
-    pass
 
 
 def suite():
@@ -47,5 +39,6 @@ def suite():
             s.addTest(__import__(modname).suite())
     return s
 
-if __name__ == b'__main__':
+
+if __name__ == '__main__':
     unittest.main(defaultTest='suite')

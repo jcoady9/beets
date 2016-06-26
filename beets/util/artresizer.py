@@ -16,17 +16,16 @@
 """Abstraction layer to resize images using PIL, ImageMagick, or a
 public resizing proxy if neither is available.
 """
-from __future__ import (division, absolute_import, print_function,
-                        unicode_literals)
+from __future__ import division, absolute_import, print_function
 
-import urllib
 import subprocess
 import os
 import re
 from tempfile import NamedTemporaryFile
-
+from six.moves.urllib.parse import urlencode
 from beets import logging
 from beets import util
+import six
 
 # Resizing methods
 PIL = 1
@@ -42,7 +41,7 @@ def resize_url(url, maxwidth):
     """Return a proxied image URL that resizes the original image to
     maxwidth (preserving aspect ratio).
     """
-    return '{0}?{1}'.format(PROXY_URL, urllib.urlencode({
+    return '{0}?{1}'.format(PROXY_URL, urlencode({
         'url': url.replace('http://', ''),
         'w': bytes(maxwidth),
     }))
@@ -125,10 +124,10 @@ def im_getsize(path_in):
     try:
         out = util.command_output(cmd)
     except subprocess.CalledProcessError as exc:
-        log.warn('ImageMagick size query failed')
+        log.warn(u'ImageMagick size query failed')
         log.debug(
-            '`convert` exited with (status {}) when '
-            'getting size with command {}:\n{}',
+            u'`convert` exited with (status {}) when '
+            u'getting size with command {}:\n{}',
             exc.returncode, cmd, exc.output.strip()
         )
         return
@@ -150,21 +149,20 @@ class Shareable(type):
     lazily-created shared instance of ``MyClass`` while calling
     ``MyClass()`` to construct a new object works as usual.
     """
-    def __init__(cls, name, bases, dict):
-        super(Shareable, cls).__init__(name, bases, dict)
-        cls._instance = None
+    def __init__(self, name, bases, dict):
+        super(Shareable, self).__init__(name, bases, dict)
+        self._instance = None
 
     @property
-    def shared(cls):
-        if cls._instance is None:
-            cls._instance = cls()
-        return cls._instance
+    def shared(self):
+        if self._instance is None:
+            self._instance = self()
+        return self._instance
 
 
-class ArtResizer(object):
+class ArtResizer(six.with_metaclass(Shareable, object)):
     """A singleton class that performs image resizes.
     """
-    __metaclass__ = Shareable
 
     def __init__(self):
         """Create a resizer object with an inferred method.
@@ -219,25 +217,26 @@ class ArtResizer(object):
     @staticmethod
     def _check_method():
         """Return a tuple indicating an available method and its version."""
-        version = has_IM()
+        version = get_im_version()
         if version:
             return IMAGEMAGICK, version
 
-        version = has_PIL()
+        version = get_pil_version()
         if version:
             return PIL, version
 
         return WEBPROXY, (0)
 
 
-def has_IM():
+def get_im_version():
     """Return Image Magick version or None if it is unavailable
-    Try invoking ImageMagick's "convert"."""
+    Try invoking ImageMagick's "convert".
+    """
     try:
-        out = util.command_output([b'identify', b'--version'])
+        out = util.command_output([b'convert', b'--version'])
 
-        if 'imagemagick' in out.lower():
-            pattern = r".+ (\d+)\.(\d+)\.(\d+).*"
+        if b'imagemagick' in out.lower():
+            pattern = br".+ (\d+)\.(\d+)\.(\d+).*"
             match = re.search(pattern, out)
             if match:
                 return (int(match.group(1)),
@@ -245,11 +244,12 @@ def has_IM():
                         int(match.group(3)))
             return (0,)
 
-    except (subprocess.CalledProcessError, OSError):
+    except (subprocess.CalledProcessError, OSError) as exc:
+        log.debug(u'ImageMagick check `convert --version` failed: {}', exc)
         return None
 
 
-def has_PIL():
+def get_pil_version():
     """Return Image Magick version or None if it is unavailable
     Try importing PIL."""
     try:

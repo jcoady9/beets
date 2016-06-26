@@ -16,8 +16,7 @@
 """Uses the `KeyFinder` program to add the `initial_key` field.
 """
 
-from __future__ import (division, absolute_import, print_function,
-                        unicode_literals)
+from __future__ import division, absolute_import, print_function
 
 import subprocess
 
@@ -41,7 +40,7 @@ class KeyFinderPlugin(BeetsPlugin):
 
     def commands(self):
         cmd = ui.Subcommand('keyfinder',
-                            help='detect and add initial key from audio')
+                            help=u'detect and add initial key from audio')
         cmd.func = self.command
         return [cmd]
 
@@ -53,7 +52,7 @@ class KeyFinderPlugin(BeetsPlugin):
 
     def find_key(self, items, write=False):
         overwrite = self.config['overwrite'].get(bool)
-        bin = util.bytestring_path(self.config['bin'].get(unicode))
+        bin = util.bytestring_path(self.config['bin'].as_str())
 
         for item in items:
             if item['initial_key'] and not overwrite:
@@ -63,12 +62,12 @@ class KeyFinderPlugin(BeetsPlugin):
                 output = util.command_output([bin, b'-f',
                                               util.syspath(item.path)])
             except (subprocess.CalledProcessError, OSError) as exc:
-                self._log.error('execution failed: {0}', exc)
+                self._log.error(u'execution failed: {0}', exc)
                 continue
             except UnicodeEncodeError:
                 # Workaround for Python 2 Windows bug.
                 # http://bugs.python.org/issue1759845
-                self._log.error('execution failed for Unicode path: {0!r}',
+                self._log.error(u'execution failed for Unicode path: {0!r}',
                                 item.path)
                 continue
 

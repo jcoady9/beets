@@ -15,8 +15,7 @@
 
 """Converts tracks or albums to external directory
 """
-from __future__ import (division, absolute_import, print_function,
-                        unicode_literals)
+from __future__ import division, absolute_import, print_function
 
 import os
 import threading
@@ -29,6 +28,7 @@ from beets import ui, util, plugins, config
 from beets.plugins import BeetsPlugin
 from beets.util.confit import ConfigTypeError
 from beets import art
+from beets.util.artresizer import ArtResizer
 
 _fs_lock = threading.Lock()
 _temp_files = []  # Keep track of temporary transcoded files for deletion.
@@ -39,7 +39,7 @@ ALIASES = {
     u'vorbis': u'ogg',
 }
 
-LOSSLESS_FORMATS = ['ape', 'flac', 'alac', 'wav']
+LOSSLESS_FORMATS = ['ape', 'flac', 'alac', 'wav', 'aiff']
 
 
 def replace_ext(path, ext):
@@ -47,23 +47,24 @@ def replace_ext(path, ext):
 
     The new extension must not contain a leading dot.
     """
-    return os.path.splitext(path)[0] + b'.' + ext
+    ext_dot = util.bytestring_path('.' + ext)
+    return os.path.splitext(path)[0] + ext_dot
 
 
 def get_format(fmt=None):
-    """Return the command tempate and the extension from the config.
+    """Return the command template and the extension from the config.
     """
     if not fmt:
-        fmt = config['convert']['format'].get(unicode).lower()
+        fmt = config['convert']['format'].as_str().lower()
     fmt = ALIASES.get(fmt, fmt)
 
     try:
         format_info = config['convert']['formats'][fmt].get(dict)
         command = format_info['command']
-        extension = format_info['extension']
+        extension = format_info.get('extension', fmt)
     except KeyError:
         raise ui.UserError(
-            u'convert: format {0} needs "command" and "extension" fields'
+            u'convert: format {0} needs the "command" field'
             .format(fmt)
         )
     except ConfigTypeError:
@@ -73,14 +74,14 @@ def get_format(fmt=None):
     # Convenience and backwards-compatibility shortcuts.
     keys = config['convert'].keys()
     if 'command' in keys:
-        command = config['convert']['command'].get(unicode)
+        command = config['convert']['command'].as_str()
     elif 'opts' in keys:
         # Undocumented option for backwards compatibility with < 1.3.1.
         command = u'ffmpeg -i $source -y {0} $dest'.format(
-            config['convert']['opts'].get(unicode)
+            config['convert']['opts'].as_str()
         )
     if 'extension' in keys:
-        extension = config['convert']['extension'].get(unicode)
+        extension = config['convert']['extension'].as_str()
 
     return (command.encode('utf8'), extension.encode('utf8'))
 
@@ -120,7 +121,7 @@ class ConvertPlugin(BeetsPlugin):
                 u'opus':
                     u'ffmpeg -i $source -y -vn -acodec libopus -ab 96k $dest',
                 u'ogg':
-                    u'ffmpeg -i $source -y -vn -acodec libvorbis -aq 2 $dest',
+                    u'ffmpeg -i $source -y -vn -acodec libvorbis -aq 3 $dest',
                 u'wma':
                     u'ffmpeg -i $source -y -vn -acodec wmav2 -vn $dest',
             },
@@ -132,27 +133,28 @@ class ConvertPlugin(BeetsPlugin):
             u'paths': {},
             u'never_convert_lossy_files': False,
             u'copy_album_art': False,
+            u'album_art_maxwidth': 0,
         })
         self.import_stages = [self.auto_convert]
 
         self.register_listener('import_task_files', self._cleanup)
 
     def commands(self):
-        cmd = ui.Subcommand('convert', help='convert to external location')
+        cmd = ui.Subcommand('convert', help=u'convert to external location')
         cmd.parser.add_option('-p', '--pretend', action='store_true',
-                              help='show actions but do nothing')
+                              help=u'show actions but do nothing')
         cmd.parser.add_option('-t', '--threads', action='store', type='int',
-                              help='change the number of threads, \
+                              help=u'change the number of threads, \
                               defaults to maximum available processors')
         cmd.parser.add_option('-k', '--keep-new', action='store_true',
-                              dest='keep_new', help='keep only the converted \
+                              dest='keep_new', help=u'keep only the converted \
                               and move the old files')
         cmd.parser.add_option('-d', '--dest', action='store',
-                              help='set the destination directory')
+                              help=u'set the destination directory')
         cmd.parser.add_option('-f', '--format', action='store', dest='format',
-                              help='set the target format of the tracks')
+                              help=u'set the target format of the tracks')
         cmd.parser.add_option('-y', '--yes', action='store_true', dest='yes',
-                              help='do not ask for confirmation')
+                              help=u'do not ask for confirmation')
         cmd.parser.add_album_option()
         cmd.func = self.convert_func
         return [cmd]
@@ -184,12 +186,12 @@ class ConvertPlugin(BeetsPlugin):
         args = shlex.split(command)
         for i, arg in enumerate(args):
             args[i] = Template(arg).safe_substitute({
-                b'source': source,
-                b'dest': dest,
+                'source': source,
+                'dest': dest,
             })
 
         if pretend:
-            self._log.info(' '.join(ui.decargs(args)))
+            self._log.info(u' '.join(ui.decargs(args)))
             return
 
         try:
@@ -198,16 +200,17 @@ class ConvertPlugin(BeetsPlugin):
             # Something went wrong (probably Ctrl+C), remove temporary files
             self._log.info(u'Encoding {0} failed. Cleaning up...',
                            util.displayable_path(source))
-            self._log.debug(u'Command {0} exited with status {1}',
-                            exc.cmd.decode('utf8', 'ignore'),
-                            exc.returncode)
+            self._log.debug(u'Command {0} exited with status {1}: {2}',
+                            args,
+                            exc.returncode,
+                            exc.output)
             util.remove(dest)
             util.prune_dirs(os.path.dirname(dest))
             raise
         except OSError as exc:
             raise ui.UserError(
-                u"convert: could invoke '{0}': {1}".format(
-                    ' '.join(args), exc
+                u"convert: couldn't invoke '{0}': {1}".format(
+                    u' '.join(ui.decargs(args)), exc
                 )
             )
 
@@ -217,6 +220,9 @@ class ConvertPlugin(BeetsPlugin):
 
     def convert_item(self, dest_dir, keep_new, path_formats, fmt,
                      pretend=False):
+        """A pipeline thread that converts `Item` objects from a
+        library.
+        """
         command, ext = get_format(fmt)
         item, original, converted = None, None, None
         while True:
@@ -292,7 +298,7 @@ class ConvertPlugin(BeetsPlugin):
             if self.config['embed']:
                 album = item.get_album()
                 if album and album.artpath:
-                    self._log.debug('embedding album art from {}',
+                    self._log.debug(u'embedding album art from {}',
                                     util.displayable_path(album.artpath))
                     art.embed_item(self._log, item, album.artpath,
                                    itempath=converted)
@@ -305,8 +311,8 @@ class ConvertPlugin(BeetsPlugin):
                              dest=converted, keepnew=False)
 
     def copy_album_art(self, album, dest_dir, path_formats, pretend=False):
-        """Copies the associated cover art of the album. Album must have at
-        least one track.
+        """Copies or converts the associated cover art of the album. Album must
+        have at least one track.
         """
         if not album or not album.artpath:
             return
@@ -336,20 +342,42 @@ class ConvertPlugin(BeetsPlugin):
                            util.displayable_path(album.artpath))
             return
 
-        if pretend:
-            self._log.info(u'cp {0} {1}',
+        # Decide whether we need to resize the cover-art image.
+        resize = False
+        maxwidth = None
+        if self.config['album_art_maxwidth']:
+            maxwidth = self.config['album_art_maxwidth'].get(int)
+            size = ArtResizer.shared.get_size(album.artpath)
+            self._log.debug('image size: {}', size)
+            if size:
+                resize = size[0] > maxwidth
+            else:
+                self._log.warning(u'Could not get size of image (please see '
+                                  u'documentation for dependencies).')
+
+        # Either copy or resize (while copying) the image.
+        if resize:
+            self._log.info(u'Resizing cover art from {0} to {1}',
                            util.displayable_path(album.artpath),
                            util.displayable_path(dest))
+            if not pretend:
+                ArtResizer.shared.resize(maxwidth, album.artpath, dest)
         else:
-            self._log.info(u'Copying cover art to {0}',
-                           util.displayable_path(dest))
-            util.copy(album.artpath, dest)
+            if pretend:
+                self._log.info(u'cp {0} {1}',
+                               util.displayable_path(album.artpath),
+                               util.displayable_path(dest))
+            else:
+                self._log.info(u'Copying cover art to {0}',
+                               util.displayable_path(album.artpath),
+                               util.displayable_path(dest))
+                util.copy(album.artpath, dest)
 
     def convert_func(self, lib, opts, args):
         if not opts.dest:
             opts.dest = self.config['dest'].get()
         if not opts.dest:
-            raise ui.UserError('no convert destination set')
+            raise ui.UserError(u'no convert destination set')
         opts.dest = util.bytestring_path(opts.dest)
 
         if not opts.threads:
@@ -361,7 +389,7 @@ class ConvertPlugin(BeetsPlugin):
             path_formats = ui.get_path_formats()
 
         if not opts.format:
-            opts.format = self.config['format'].get(unicode).lower()
+            opts.format = self.config['format'].as_str().lower()
 
         pretend = opts.pretend if opts.pretend is not None else \
             self.config['pretend'].get(bool)
@@ -369,7 +397,7 @@ class ConvertPlugin(BeetsPlugin):
         if not pretend:
             ui.commands.list_items(lib, ui.decargs(args), opts.album)
 
-            if not (opts.yes or ui.input_yn("Convert? (Y/n)")):
+            if not (opts.yes or ui.input_yn(u"Convert? (Y/n)")):
                 return
 
         if opts.album:
@@ -394,7 +422,7 @@ class ConvertPlugin(BeetsPlugin):
         """Transcode a file automatically after it is imported into the
         library.
         """
-        fmt = self.config['format'].get(unicode).lower()
+        fmt = self.config['format'].as_str().lower()
         if should_transcode(item, fmt):
             command, ext = get_format()
 

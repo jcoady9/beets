@@ -12,8 +12,7 @@
 # The above copyright notice and this permission notice shall be
 # included in all copies or substantial portions of the Software.
 
-from __future__ import (division, absolute_import, print_function,
-                        unicode_literals)
+from __future__ import division, absolute_import, print_function
 import codecs
 
 from mock import patch
@@ -32,7 +31,7 @@ class ModifyFileMocker(object):
     """
 
     def __init__(self, contents=None, replacements=None):
-        """ `self.contents` and `self.replacements` are initalized here, in
+        """ `self.contents` and `self.replacements` are initialized here, in
         order to keep the rest of the functions of this class with the same
         signature as `EditPlugin.get_editor()`, making mocking easier.
             - `contents`: string with the contents of the file to be used for
@@ -48,7 +47,9 @@ class ModifyFileMocker(object):
         if replacements:
             self.action = self.replace_contents
 
-    def overwrite_contents(self, filename):
+    # The two methods below mock the `edit` utility function in the plugin.
+
+    def overwrite_contents(self, filename, log):
         """Modify `filename`, replacing its contents with `self.contents`. If
         `self.contents` is empty, the file remains unchanged.
         """
@@ -56,13 +57,13 @@ class ModifyFileMocker(object):
             with codecs.open(filename, 'w', encoding='utf8') as f:
                 f.write(self.contents)
 
-    def replace_contents(self, filename):
+    def replace_contents(self, filename, log):
         """Modify `filename`, reading its contents and replacing the strings
         specified in `self.replacements`.
         """
         with codecs.open(filename, 'r', encoding='utf8') as f:
             contents = f.read()
-        for old, new_ in self.replacements.iteritems():
+        for old, new_ in self.replacements.items():
             contents = contents.replace(old, new_)
         with codecs.open(filename, 'w', encoding='utf8') as f:
             f.write(contents)
@@ -70,7 +71,7 @@ class ModifyFileMocker(object):
 
 class EditMixin(object):
     """Helper containing some common functionality used for the Edit tests."""
-    def assertItemFieldsModified(self, library_items, items, fields=[],
+    def assertItemFieldsModified(self, library_items, items, fields=[],  # noqa
                                  allowed=['path']):
         """Assert that items in the library (`lib_items`) have different values
         on the specified `fields` (and *only* on those fields), compared to
@@ -132,7 +133,7 @@ class EditCommandTest(unittest.TestCase, TestHelper, EditMixin):
         self.teardown_beets()
         self.unload_plugins()
 
-    def assertCounts(self, album_count=ALBUM_COUNT, track_count=TRACK_COUNT,
+    def assertCounts(self, album_count=ALBUM_COUNT, track_count=TRACK_COUNT,  # noqa
                      write_call_count=TRACK_COUNT, title_starts_with=''):
         """Several common assertions on Album, Track and call counts."""
         self.assertEqual(len(self.lib.albums()), album_count)
@@ -218,7 +219,7 @@ class EditCommandTest(unittest.TestCase, TestHelper, EditMixin):
                                 # Apply changes.
                                 ['a'])
 
-        self.assertEqual(self.lib.items('id:1')[0].foo, 'bar')
+        self.assertEqual(self.lib.items(u'id:1')[0].foo, 'bar')
         self.assertCounts(write_call_count=1,
                           title_starts_with=u't\u00eftle')
 
@@ -265,7 +266,7 @@ class EditCommandTest(unittest.TestCase, TestHelper, EditMixin):
         """Edit the yaml file incorrectly (resulting in a well-formed but
         invalid yaml document)."""
         # Edit the yaml file to an invalid but parseable file.
-        self.run_mocked_command({'contents': 'wellformed: yes, but invalid'},
+        self.run_mocked_command({'contents': u'wellformed: yes, but invalid'},
                                 # No stdin.
                                 [])
 
@@ -423,5 +424,5 @@ class EditDuringImporterTest(TerminalImportSessionSetup, unittest.TestCase,
 def suite():
     return unittest.TestLoader().loadTestsFromName(__name__)
 
-if __name__ == b'__main__':
+if __name__ == '__main__':
     unittest.main(defaultTest='suite')

@@ -15,8 +15,7 @@
 
 """Moves patterns in path formats (suitable for moving articles)."""
 
-from __future__ import (division, absolute_import, print_function,
-                        unicode_literals)
+from __future__ import division, absolute_import, print_function
 
 import re
 from beets.plugins import BeetsPlugin
@@ -82,7 +81,7 @@ class ThePlugin(BeetsPlugin):
                 if self.config['strip']:
                     return r
                 else:
-                    fmt = self.config['format'].get(unicode)
+                    fmt = self.config['format'].as_str()
                     return fmt.format(r, t.strip()).strip()
         else:
             return u''

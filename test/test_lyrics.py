@@ -15,8 +15,7 @@
 
 """Tests for the 'lyrics' plugin."""
 
-from __future__ import (division, absolute_import, print_function,
-                        unicode_literals)
+from __future__ import division, absolute_import, print_function
 
 import os
 from test import _common
@@ -28,8 +27,9 @@ from mock import MagicMock
 from test._common import unittest
 from beetsplug import lyrics
 from beets.library import Item
-from beets.util import confit
+from beets.util import confit, bytestring_path
 from beets import logging
+import six
 
 log = logging.getLogger('beets.test_lyrics')
 raw_backend = lyrics.Backend({}, log)
@@ -180,7 +180,9 @@ def url_to_filename(url):
     url = re.sub(r'https?://|www.', '', url)
     fn = "".join(x for x in url if (x.isalnum() or x == '/'))
     fn = fn.split('/')
-    fn = os.path.join(LYRICS_ROOT_DIR, fn[0], fn[-1]) + '.txt'
+    fn = os.path.join(LYRICS_ROOT_DIR,
+                      bytestring_path(fn[0]),
+                      bytestring_path(fn[-1] + '.txt'))
     return fn
 
 
@@ -212,8 +214,8 @@ def is_lyrics_content_ok(title, text):
     keywords = LYRICS_TEXTS[google.slugify(title)]
     return all(x in text.lower() for x in keywords)
 
-LYRICS_ROOT_DIR = os.path.join(_common.RSRC, 'lyrics')
-LYRICS_TEXTS = confit.load_yaml(os.path.join(_common.RSRC, 'lyricstext.yaml'))
+LYRICS_ROOT_DIR = os.path.join(_common.RSRC, b'lyrics')
+LYRICS_TEXTS = confit.load_yaml(os.path.join(_common.RSRC, b'lyricstext.yaml'))
 DEFAULT_SONG = dict(artist=u'The Beatles', title=u'Lady Madonna')
 
 DEFAULT_SOURCES = [
@@ -353,7 +355,7 @@ class LyricsGooglePluginTest(unittest.TestCase):
         present in the title."""
         from bs4 import SoupStrainer, BeautifulSoup
         s = self.source
-        url = unicode(s['url'] + s['path'])
+        url = six.text_type(s['url'] + s['path'])
         html = raw_backend.fetch_url(url)
         soup = BeautifulSoup(html, "html.parser",
                              parse_only=SoupStrainer('title'))
@@ -366,14 +368,14 @@ class LyricsGooglePluginTest(unittest.TestCase):
         not present in the title."""
         s = self.source
         url = s['url'] + s['path']
-        urlTitle = u'example.com | Beats song by John doe'
+        url_title = u'example.com | Beats song by John doe'
 
         # very small diffs (typo) are ok eg 'beats' vs 'beets' with same artist
-        self.assertEqual(google.is_page_candidate(url, urlTitle, s['title'],
+        self.assertEqual(google.is_page_candidate(url, url_title, s['title'],
                          s['artist']), True, url)
         # reject different title
-        urlTitle = u'example.com | seets bong lyrics by John doe'
-        self.assertEqual(google.is_page_candidate(url, urlTitle, s['title'],
+        url_title = u'example.com | seets bong lyrics by John doe'
+        self.assertEqual(google.is_page_candidate(url, url_title, s['title'],
                          s['artist']), False, url)
 
     def test_is_page_candidate_special_chars(self):
@@ -385,11 +387,11 @@ class LyricsGooglePluginTest(unittest.TestCase):
         url = s['url'] + s['path']
         url_title = u'foo'
 
-        google.is_page_candidate(url, url_title, s['title'], 'Sunn O)))')
+        google.is_page_candidate(url, url_title, s['title'], u'Sunn O)))')
 
 
 def suite():
     return unittest.TestLoader().loadTestsFromName(__name__)
 
-if __name__ == b'__main__':
+if __name__ == '__main__':
     unittest.main(defaultTest='suite')

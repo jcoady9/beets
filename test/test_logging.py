@@ -1,13 +1,12 @@
 # -*- coding: utf-8 -*-
 
 """Stupid tests that ensure logging works as expected"""
-from __future__ import (division, absolute_import, print_function,
-                        unicode_literals)
+from __future__ import division, absolute_import, print_function
 
 import sys
 import threading
 import logging as log
-from StringIO import StringIO
+from six import StringIO
 
 import beets.logging as blog
 from beets import plugins, ui
@@ -15,6 +14,7 @@ import beetsplug
 from test import _common
 from test._common import unittest, TestCase
 from test import helper
+import six
 
 
 class LoggingTest(TestCase):
@@ -45,9 +45,9 @@ class LoggingTest(TestCase):
         l.addHandler(handler)
         l.propagate = False
 
-        l.warning("foo {0} {bar}", "oof", bar="baz")
+        l.warning(u"foo {0} {bar}", "oof", bar=u"baz")
         handler.flush()
-        self.assertTrue(stream.getvalue(), "foo oof baz")
+        self.assertTrue(stream.getvalue(), u"foo oof baz")
 
 
 class LoggingLevelTest(unittest.TestCase, helper.TestHelper):
@@ -59,9 +59,9 @@ class LoggingLevelTest(unittest.TestCase, helper.TestHelper):
                 self.register_listener('dummy_event', self.listener)
 
             def log_all(self, name):
-                self._log.debug('debug ' + name)
-                self._log.info('info ' + name)
-                self._log.warning('warning ' + name)
+                self._log.debug(u'debug ' + name)
+                self._log.info(u'info ' + name)
+                self._log.warning(u'warning ' + name)
 
             def commands(self):
                 cmd = ui.Subcommand('dummy')
@@ -92,76 +92,76 @@ class LoggingLevelTest(unittest.TestCase, helper.TestHelper):
         self.config['verbose'] = 0
         with helper.capture_log() as logs:
             self.run_command('dummy')
-        self.assertIn('dummy: warning cmd', logs)
-        self.assertIn('dummy: info cmd', logs)
-        self.assertNotIn('dummy: debug cmd', logs)
+        self.assertIn(u'dummy: warning cmd', logs)
+        self.assertIn(u'dummy: info cmd', logs)
+        self.assertNotIn(u'dummy: debug cmd', logs)
 
     def test_command_level1(self):
         self.config['verbose'] = 1
         with helper.capture_log() as logs:
             self.run_command('dummy')
-        self.assertIn('dummy: warning cmd', logs)
-        self.assertIn('dummy: info cmd', logs)
-        self.assertIn('dummy: debug cmd', logs)
+        self.assertIn(u'dummy: warning cmd', logs)
+        self.assertIn(u'dummy: info cmd', logs)
+        self.assertIn(u'dummy: debug cmd', logs)
 
     def test_command_level2(self):
         self.config['verbose'] = 2
         with helper.capture_log() as logs:
             self.run_command('dummy')
-        self.assertIn('dummy: warning cmd', logs)
-        self.assertIn('dummy: info cmd', logs)
-        self.assertIn('dummy: debug cmd', logs)
+        self.assertIn(u'dummy: warning cmd', logs)
+        self.assertIn(u'dummy: info cmd', logs)
+        self.assertIn(u'dummy: debug cmd', logs)
 
     def test_listener_level0(self):
         self.config['verbose'] = 0
         with helper.capture_log() as logs:
             plugins.send('dummy_event')
-        self.assertIn('dummy: warning listener', logs)
-        self.assertNotIn('dummy: info listener', logs)
-        self.assertNotIn('dummy: debug listener', logs)
+        self.assertIn(u'dummy: warning listener', logs)
+        self.assertNotIn(u'dummy: info listener', logs)
+        self.assertNotIn(u'dummy: debug listener', logs)
 
     def test_listener_level1(self):
         self.config['verbose'] = 1
         with helper.capture_log() as logs:
             plugins.send('dummy_event')
-        self.assertIn('dummy: warning listener', logs)
-        self.assertIn('dummy: info listener', logs)
-        self.assertNotIn('dummy: debug listener', logs)
+        self.assertIn(u'dummy: warning listener', logs)
+        self.assertIn(u'dummy: info listener', logs)
+        self.assertNotIn(u'dummy: debug listener', logs)
 
     def test_listener_level2(self):
         self.config['verbose'] = 2
         with helper.capture_log() as logs:
             plugins.send('dummy_event')
-        self.assertIn('dummy: warning listener', logs)
-        self.assertIn('dummy: info listener', logs)
-        self.assertIn('dummy: debug listener', logs)
+        self.assertIn(u'dummy: warning listener', logs)
+        self.assertIn(u'dummy: info listener', logs)
+        self.assertIn(u'dummy: debug listener', logs)
 
     def test_import_stage_level0(self):
         self.config['verbose'] = 0
         with helper.capture_log() as logs:
             importer = self.create_importer()
             importer.run()
-        self.assertIn('dummy: warning import_stage', logs)
-        self.assertNotIn('dummy: info import_stage', logs)
-        self.assertNotIn('dummy: debug import_stage', logs)
+        self.assertIn(u'dummy: warning import_stage', logs)
+        self.assertNotIn(u'dummy: info import_stage', logs)
+        self.assertNotIn(u'dummy: debug import_stage', logs)
 
     def test_import_stage_level1(self):
         self.config['verbose'] = 1
         with helper.capture_log() as logs:
             importer = self.create_importer()
             importer.run()
-        self.assertIn('dummy: warning import_stage', logs)
-        self.assertIn('dummy: info import_stage', logs)
-        self.assertNotIn('dummy: debug import_stage', logs)
+        self.assertIn(u'dummy: warning import_stage', logs)
+        self.assertIn(u'dummy: info import_stage', logs)
+        self.assertNotIn(u'dummy: debug import_stage', logs)
 
     def test_import_stage_level2(self):
         self.config['verbose'] = 2
         with helper.capture_log() as logs:
             importer = self.create_importer()
             importer.run()
-        self.assertIn('dummy: warning import_stage', logs)
-        self.assertIn('dummy: info import_stage', logs)
-        self.assertIn('dummy: debug import_stage', logs)
+        self.assertIn(u'dummy: warning import_stage', logs)
+        self.assertIn(u'dummy: info import_stage', logs)
+        self.assertIn(u'dummy: debug import_stage', logs)
 
 
 @_common.slow_test()
@@ -182,9 +182,9 @@ class ConcurrentEventsTest(TestCase, helper.TestHelper):
             self.t1_step = self.t2_step = 0
 
         def log_all(self, name):
-            self._log.debug('debug ' + name)
-            self._log.info('info ' + name)
-            self._log.warning('warning ' + name)
+            self._log.debug(u'debug ' + name)
+            self._log.info(u'info ' + name)
+            self._log.warning(u'warning ' + name)
 
         def listener1(self):
             try:
@@ -219,7 +219,7 @@ class ConcurrentEventsTest(TestCase, helper.TestHelper):
 
         def check_dp_exc():
             if dp.exc_info:
-                raise dp.exc_info[1], None, dp.exc_info[2]
+                six.reraise(dp.exc_info[1], None, dp.exc_info[2])
 
         try:
             dp.lock1.acquire()
@@ -257,14 +257,14 @@ class ConcurrentEventsTest(TestCase, helper.TestHelper):
             self.assertFalse(t2.is_alive())
 
         except:
-            print("Alive threads:", threading.enumerate())
+            print(u"Alive threads:", threading.enumerate())
             if dp.lock1.locked():
-                print("Releasing lock1 after exception in test")
+                print(u"Releasing lock1 after exception in test")
                 dp.lock1.release()
             if dp.lock2.locked():
-                print("Releasing lock2 after exception in test")
+                print(u"Releasing lock2 after exception in test")
                 dp.lock2.release()
-            print("Alive threads:", threading.enumerate())
+            print(u"Alive threads:", threading.enumerate())
             raise
 
     def test_root_logger_levels(self):
@@ -283,19 +283,19 @@ class ConcurrentEventsTest(TestCase, helper.TestHelper):
             importer = self.create_importer()
             importer.run()
         for l in logs:
-            self.assertIn("import", l)
-            self.assertIn("album", l)
+            self.assertIn(u"import", l)
+            self.assertIn(u"album", l)
 
         blog.getLogger('beets').set_global_level(blog.DEBUG)
         with helper.capture_log() as logs:
             importer = self.create_importer()
             importer.run()
-        self.assertIn("Sending event: database_change", logs)
+        self.assertIn(u"Sending event: database_change", logs)
 
 
 def suite():
     return unittest.TestLoader().loadTestsFromName(__name__)
 
 
-if __name__ == b'__main__':
+if __name__ == '__main__':
     unittest.main(defaultTest='suite')

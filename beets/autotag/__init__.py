@@ -16,8 +16,7 @@
 """Facilities for automatically determining files' correct metadata.
 """
 
-from __future__ import (division, absolute_import, print_function,
-                        unicode_literals)
+from __future__ import division, absolute_import, print_function
 
 from beets import logging
 from beets import config
@@ -53,7 +52,7 @@ def apply_metadata(album_info, mapping):
     """Set the items' metadata to match an AlbumInfo object using a
     mapping from Items to TrackInfo objects.
     """
-    for item, track_info in mapping.iteritems():
+    for item, track_info in mapping.items():
         # Album, artist, track count.
         if track_info.artist:
             item.artist = track_info.artist

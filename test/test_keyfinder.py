@@ -13,14 +13,14 @@
 # The above copyright notice and this permission notice shall be
 # included in all copies or substantial portions of the Software.
 
-from __future__ import (division, absolute_import, print_function,
-                        unicode_literals)
+from __future__ import division, absolute_import, print_function
 
 from mock import patch
 from test._common import unittest
 from test.helper import TestHelper
 
 from beets.library import Item
+from beets import util
 
 
 class KeyFinderTest(unittest.TestCase, TestHelper):
@@ -46,7 +46,7 @@ class KeyFinderTest(unittest.TestCase, TestHelper):
         item.load()
         self.assertEqual(item['initial_key'], 'C#m')
         self.command_output.assert_called_with(
-            ['KeyFinder', '-f', item.path])
+            ['KeyFinder', '-f', util.syspath(item.path)])
 
     def test_add_key_on_import(self):
         self.command_output.return_value = 'dbm'
@@ -82,5 +82,5 @@ class KeyFinderTest(unittest.TestCase, TestHelper):
 def suite():
     return unittest.TestLoader().loadTestsFromName(__name__)
 
-if __name__ == b'__main__':
+if __name__ == '__main__':
     unittest.main(defaultTest='suite')

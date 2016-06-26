@@ -56,7 +56,7 @@ if 'sdist' in sys.argv:
 
 setup(
     name='beets',
-    version='1.3.18',
+    version='1.3.20',
     description='music tagger and library organizer',
     author='Adrian Sampson',
     author_email='adrian@radbox.org',
@@ -86,6 +86,7 @@ setup(
     },
 
     install_requires=[
+        'six',
         'enum34>=1.0.4',
         'mutagen>=1.27',
         'munkres',
@@ -93,14 +94,12 @@ setup(
         'musicbrainzngs>=0.4',
         'pyyaml',
         'jellyfish',
-    ] + (['colorama'] if (sys.platform == 'win32') else []) +
-        (['ordereddict'] if sys.version_info < (2, 7, 0) else []),
+    ] + (['colorama'] if (sys.platform == 'win32') else []),
 
     tests_require=[
         'beautifulsoup4',
         'flask',
         'mock',
-        'pyechonest',
         'pylast',
         'rarfile',
         'responses',
@@ -114,7 +113,7 @@ setup(
         'fetchart': ['requests'],
         'chroma': ['pyacoustid'],
         'discogs': ['discogs-client>=2.1.0'],
-        'echonest': ['pyechonest'],
+        'beatport': ['requests-oauthlib>=0.6.1'],
         'lastgenre': ['pylast'],
         'mpdstats': ['python-mpd2'],
         'web': ['flask', 'flask-cors'],
@@ -124,7 +123,7 @@ setup(
     },
     # Non-Python/non-PyPI plugin dependencies:
     # convert: ffmpeg
-    # bpd: pygst
+    # bpd: python-gi and GStreamer
 
     classifiers=[
         'Topic :: Multimedia :: Sound/Audio',

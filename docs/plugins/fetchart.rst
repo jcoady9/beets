@@ -42,21 +42,29 @@ file. The available options are:
   too big. The resize operation reduces image width to at most ``maxwidth``
   pixels. The height is recomputed so that the aspect ratio is preserved.
 - **enforce_ratio**: Only images with a width:height ratio of 1:1 are
-  considered as valid album art candidates. Default: ``no``.
-- **remote_priority**: Query remote sources every time and use local image only
-  as fallback.
-  Default: ``no``; remote (Web) art sources are only queried if no local art is
-  found in the filesystem.
+  considered as valid album art candidates if set to ``yes``.
+  It is also possible to specify a certain deviation to the exact ratio to
+  still be considered valid. This can be done either in pixels
+  (``enforce_ratio: 10px``) or as a percentage of the longer edge
+  (``enforce_ratio: 0.5%``). Default: ``no``.
 - **sources**: List of sources to search for images. An asterisk `*` expands
   to all available sources.
-  Default: ``coverart itunes amazon albumart``, i.e., everything but
-  ``wikipedia`` and ``google``. Enable those two sources for more matches at
-  the cost of some speed.
+  Default: ``filesystem coverart itunes amazon albumart``, i.e., everything but
+  ``wikipedia``, ``google`` and ``fanarttv``. Enable those sources for more
+  matches at the cost of some speed. They are searched in the given order, 
+  thus in the default config, no remote (Web) art source are queried if
+  local art is found in the filesystem. To use a local image as fallback, 
+  move it to the end of the list.
 - **google_key**: Your Google API key (to enable the Google Custom Search
   backend).
   Default: None.
 - **google_engine**: The custom search engine to use.
   Default: The `beets custom search engine`_, which searches the entire web.
+  **fanarttv_key**: The personal API key for requesting art from
+  fanart.tv. See below.
+- **store_source**: If enabled, fetchart stores the artwork's source in a
+  flexible tag named ``art_source``. See below for the rationale behind this.
+  Default: ``no``.
 
 Note: ``minwidth`` and ``enforce_ratio`` options require either `ImageMagick`_
 or `Pillow`_.
@@ -161,6 +169,34 @@ default engine searches the entire web for cover art.
 
 Note that the Google custom search API is limited to 100 queries per day.
 After that, the fetchart plugin will fall back on other declared data sources.
+
+Fanart.tv
+'''''''''
+
+Although not strictly necessary right now, you might think about
+`registering a personal fanart.tv API key`_. Set the ``fanarttv_key``
+configuration option to your key, then add ``fanarttv`` to the list of sources
+in your configuration.
+
+.. _registering a personal fanart.tv API key: https://fanart.tv/get-an-api-key/
+
+More detailed information can be found `on their blog`_. Specifically, the
+personal key will give you earlier access to new art.
+
+.. _on their blog: https://fanart.tv/2015/01/personal-api-keys/
+
+Storing the Artwork's Source
+----------------------------
+
+Storing the current artwork's source might be used to narrow down
+``fetchart`` commands. For example, if some albums have artwork placed
+manually in their directories that should not be replaced by a forced
+album art fetch, you could do
+
+``beet fetchart -f ^art_source:filesystem``
+
+The values written to ``art_source`` are the same names used in the ``sources``
+configuration value.
 
 Embedding Album Art
 -------------------

@@ -15,6 +15,9 @@
 
 """Test module for file ui/__init__.py
 """
+
+from __future__ import division, absolute_import, print_function
+
 from test import _common
 from test._common import unittest
 
@@ -113,5 +116,5 @@ class InitTest(_common.LibTestCase):
 def suite():
     return unittest.TestLoader().loadTestsFromName(__name__)
 
-if __name__ == b'__main__':
+if __name__ == '__main__':
     unittest.main(defaultTest='suite')

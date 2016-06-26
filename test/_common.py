@@ -14,27 +14,23 @@
 # included in all copies or substantial portions of the Software.
 
 """Some common functionality for beets' test cases."""
-from __future__ import (division, absolute_import, print_function,
-                        unicode_literals)
+from __future__ import division, absolute_import, print_function
 
 import time
 import sys
 import os
 import tempfile
 import shutil
+import unittest
 from contextlib import contextmanager
 
-# Use unittest2 on Python < 2.7.
-try:
-    import unittest2 as unittest
-except ImportError:
-    import unittest
 
 # Mangle the search path to include the beets sources.
 sys.path.insert(0, '..')  # noqa
 import beets.library
 from beets import importer, logging
 from beets.ui import commands
+from beets import util
 import beets
 
 # Make sure the development versions of the plugins are used
@@ -44,7 +40,8 @@ beetsplug.__path__ = [os.path.abspath(
 )]
 
 # Test resources path.
-RSRC = os.path.join(os.path.dirname(__file__), b'rsrc')
+RSRC = util.bytestring_path(os.path.join(os.path.dirname(__file__), 'rsrc'))
+PLUGINPATH = os.path.join(os.path.dirname(__file__), 'rsrc', 'beetsplug')
 
 # Propagate to root loger so nosetest can capture it
 log = logging.getLogger('beets')
@@ -102,11 +99,11 @@ def album(lib=None):
     _item_ident += 1
     i = beets.library.Album(
         artpath=None,
-        albumartist='some album artist',
-        albumartist_sort='some sort album artist',
-        albumartist_credit='some album artist credit',
-        album='the album',
-        genre='the genre',
+        albumartist=u'some album artist',
+        albumartist_sort=u'some sort album artist',
+        albumartist_credit=u'some album artist credit',
+        album=u'the album',
+        genre=u'the genre',
         year=2014,
         month=2,
         day=5,
@@ -127,9 +124,30 @@ def import_session(lib=None, loghandler=None, paths=[], query=[], cli=False):
     return cls(lib, loghandler, paths, query)
 
 
+class Assertions(object):
+    """A mixin with additional unit test assertions."""
+
+    def assertExists(self, path):  # noqa
+        self.assertTrue(os.path.exists(util.syspath(path)),
+                        u'file does not exist: {!r}'.format(path))
+
+    def assertNotExists(self, path):  # noqa
+        self.assertFalse(os.path.exists(util.syspath(path)),
+                         u'file exists: {!r}'.format((path)))
+
+    def assert_equal_path(self, a, b):
+        """Check that two paths are equal."""
+        # The common case.
+        if a == b:
+            return
+
+        self.assertEqual(util.normpath(a), util.normpath(b),
+                         u'paths are not equal: {!r} and {!r}'.format(a, b))
+
+
 # A test harness for all beets tests.
 # Provides temporary, isolated configuration.
-class TestCase(unittest.TestCase):
+class TestCase(unittest.TestCase, Assertions):
     """A unittest.TestCase subclass that saves and restores beets'
     global configuration. This allows tests to make temporary
     modifications that will then be automatically removed when the test
@@ -167,14 +185,6 @@ class TestCase(unittest.TestCase):
 
         beets.config.clear()
         beets.config._materialized = False
-
-    def assertExists(self, path):
-        self.assertTrue(os.path.exists(path),
-                        'file does not exist: {!r}'.format(path))
-
-    def assertNotExists(self, path):
-        self.assertFalse(os.path.exists(path),
-                         'file exists: {!r}'.format((path)))
 
 
 class LibTestCase(TestCase):
@@ -228,7 +238,7 @@ class InputException(Exception):
     def __str__(self):
         msg = "Attempt to read with no input provided."
         if self.output is not None:
-            msg += " Output: %s" % self.output
+            msg += " Output: {!r}".format(self.output)
         return msg
 
 
@@ -352,5 +362,5 @@ def slow_test(unused=None):
     def _id(obj):
         return obj
     if 'SKIP_SLOW_TESTS' in os.environ:
-        return unittest.skip('test is slow')
+        return unittest.skip(u'test is slow')
     return _id

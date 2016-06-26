@@ -13,8 +13,7 @@
 # The above copyright notice and this permission notice shall be
 # included in all copies or substantial portions of the Software.
 
-from __future__ import (division, absolute_import, print_function,
-                        unicode_literals)
+from __future__ import division, absolute_import, print_function
 
 """Write paths of imported files in various formats to ease later import in a
 music player. Also allow printing the new file locations to stdout in case
@@ -62,7 +61,7 @@ def _write_m3u(m3u_path, items_paths):
     """Append relative paths to items into m3u file.
     """
     mkdirall(m3u_path)
-    with open(syspath(m3u_path), 'a') as f:
+    with open(syspath(m3u_path), 'ab') as f:
         for path in items_paths:
             f.write(path + b'\n')
 
@@ -120,7 +119,7 @@ class ImportFeedsPlugin(BeetsPlugin):
 
         if 'm3u' in formats:
             m3u_basename = bytestring_path(
-                self.config['m3u_name'].get(unicode))
+                self.config['m3u_name'].as_str())
             m3u_path = os.path.join(feedsdir, m3u_basename)
             _write_m3u(m3u_path, paths)
 
@@ -135,9 +134,9 @@ class ImportFeedsPlugin(BeetsPlugin):
                     os.symlink(syspath(path), syspath(dest))
 
         if 'echo' in formats:
-            self._log.info("Location of imported music:")
+            self._log.info(u"Location of imported music:")
             for path in paths:
-                self._log.info("  {0}", path)
+                self._log.info(u"  {0}", path)
 
     def library_opened(self, lib):
         if self.config['dir'].get() is None:

@@ -15,8 +15,7 @@
 
 """Support for beets plugins."""
 
-from __future__ import (division, absolute_import, print_function,
-                        unicode_literals)
+from __future__ import division, absolute_import, print_function
 
 import inspect
 import traceback
@@ -28,8 +27,9 @@ from functools import wraps
 import beets
 from beets import logging
 from beets import mediafile
+import six
 
-PLUGIN_NAMESPACE = b'beetsplug'
+PLUGIN_NAMESPACE = 'beetsplug'
 
 # Plugins using the Last.fm API can share the same API key.
 LASTFM_KEY = '2dc3914abf35f0d9c92d97d8f8e42b43'
@@ -55,10 +55,10 @@ class PluginLogFilter(logging.Filter):
 
     def filter(self, record):
         if hasattr(record.msg, 'msg') and isinstance(record.msg.msg,
-                                                     basestring):
+                                                     six.string_types):
             # A _LogMessage from our hacked-up Logging replacement.
             record.msg.msg = self.prefix + record.msg.msg
-        elif isinstance(record.msg, basestring):
+        elif isinstance(record.msg, six.string_types):
             record.msg = self.prefix + record.msg
         return True
 
@@ -73,7 +73,7 @@ class BeetsPlugin(object):
     def __init__(self, name=None):
         """Perform one-time plugin setup.
         """
-        self.name = name or self.__module__.decode('utf8').split('.')[-1]
+        self.name = name or self.__module__.split('.')[-1]
         self.config = beets.config[self.name]
         if not self.template_funcs:
             self.template_funcs = {}
@@ -248,8 +248,7 @@ def load_plugins(names=()):
     BeetsPlugin subclasses desired.
     """
     for name in names:
-        bname = name.encode('utf8')
-        modname = b'%s.%s' % (PLUGIN_NAMESPACE, bname)
+        modname = '{0}.{1}'.format(PLUGIN_NAMESPACE, name)
         try:
             try:
                 namespace = __import__(modname, None, None)
@@ -260,14 +259,14 @@ def load_plugins(names=()):
                 else:
                     raise
             else:
-                for obj in getattr(namespace, bname).__dict__.values():
+                for obj in getattr(namespace, name).__dict__.values():
                     if isinstance(obj, type) and issubclass(obj, BeetsPlugin) \
                             and obj != BeetsPlugin and obj not in _classes:
                         _classes.add(obj)
 
         except:
             log.warn(
-                '** error loading plugin {}:\n{}',
+                u'** error loading plugin {}:\n{}',
                 name,
                 traceback.format_exc(),
             )
@@ -314,7 +313,7 @@ def queries():
 
 def types(model_cls):
     # Gives us `item_types` and `album_types`
-    attr_name = b'{0}_types'.format(model_cls.__name__.lower())
+    attr_name = '{0}_types'.format(model_cls.__name__.lower())
     types = {}
     for plugin in find_plugins():
         plugin_types = getattr(plugin, attr_name, {})
@@ -322,8 +321,8 @@ def types(model_cls):
             if field in types and plugin_types[field] != types[field]:
                 raise PluginConflictException(
                     u'Plugin {0} defines flexible field {1} '
-                    'which has already been defined with '
-                    'another type.'.format(plugin.name, field)
+                    u'which has already been defined with '
+                    u'another type.'.format(plugin.name, field)
                 )
         types.update(plugin_types)
     return types

@@ -33,6 +33,7 @@ Each plugin has its own set of options that can be defined in a section bearing 
 
    acousticbrainz
    badfiles
+   beatport
    bpd
    bpm
    bucket
@@ -40,15 +41,16 @@ Each plugin has its own set of options that can be defined in a section bearing 
    convert
    discogs
    duplicates
-   echonest
    edit
    embedart
    embyupdate
+   export
    fetchart
    fromfilename
    ftintitle
    fuzzy
    freedesktop
+   hook
    ihate
    importadded
    importfeeds
@@ -98,9 +100,7 @@ Metadata
 
 * :doc:`acousticbrainz`: Fetch various AcousticBrainz metadata
 * :doc:`bpm`: Measure tempo using keystrokes.
-* :doc:`echonest`: Automatically fetch `acoustic attributes`_ from
-  `the Echo Nest`_ (tempo, energy, danceability, ...).
-* :doc:`edit`: Edit metadata from a texteditor.
+* :doc:`edit`: Edit metadata from a text editor.
 * :doc:`embedart`: Embed album art images into files' metadata.
 * :doc:`fetchart`: Fetch album cover art from various sources.
 * :doc:`ftintitle`: Move "featured" artists from the artist field to the title
@@ -120,8 +120,6 @@ Metadata
 * :doc:`scrub`: Clean extraneous metadata from music files.
 * :doc:`zero`: Nullify fields by pattern or unconditionally.
 
-.. _Acoustic Attributes: http://developer.echonest.com/acoustic-attributes.html
-.. _the Echo Nest: http://www.echonest.com
 .. _KeyFinder: http://www.ibrahimshaath.co.uk/keyfinder/
 
 Path Formats
@@ -161,7 +159,9 @@ Miscellaneous
 * :doc:`convert`: Transcode music and embed album art while exporting to
   a different directory.
 * :doc:`duplicates`: List duplicate tracks or albums.
+* :doc:`export`: Export data from queries to a format.
 * :doc:`fuzzy`: Search albums and tracks with fuzzy string matching.
+* :doc:`hook`: Run a command when an event is emitted by beets.
 * :doc:`ihate`: Automatically skip albums and tracks during the import process.
 * :doc:`info`: Print music files' tags to the console.
 * :doc:`mbcollection`: Maintain your MusicBrainz collection list.
@@ -240,6 +240,6 @@ Here are a few of the plugins written by the beets community:
 .. _beets-alternatives: https://github.com/geigerzaehler/beets-alternatives
 .. _beets-follow: https://github.com/nolsto/beets-follow
 .. _beets-setlister: https://github.com/tomjaspers/beets-setlister
-.. _beets-noimport: https://github.com/ttsda/beets-noimport
+.. _beets-noimport: https://gitlab.com/tiago.dias/beets-noimport
 .. _whatlastgenre: https://github.com/YetAnotherNerd/whatlastgenre/tree/master/plugin/beets
 .. _beets-usertag: https://github.com/igordertigor/beets-usertag

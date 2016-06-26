@@ -13,8 +13,7 @@
 # The above copyright notice and this permission notice shall be
 # included in all copies or substantial portions of the Software.
 
-from __future__ import (division, absolute_import, print_function,
-                        unicode_literals)
+from __future__ import division, absolute_import, print_function
 
 """Provides the basic, interface-agnostic workflow for importing and
 autotagging music files.
@@ -70,7 +69,7 @@ class ImportAbort(Exception):
 def _open_state():
     """Reads the state file, returning a dictionary."""
     try:
-        with open(config['statefile'].as_filename()) as f:
+        with open(config['statefile'].as_filename(), 'rb') as f:
             return pickle.load(f)
     except Exception as exc:
         # The `pickle` module can emit all sorts of exceptions during
@@ -84,7 +83,7 @@ def _open_state():
 def _save_state(state):
     """Writes the state dictionary out to disk."""
     try:
-        with open(config['statefile'].as_filename(), 'w') as f:
+        with open(config['statefile'].as_filename(), 'wb') as f:
             pickle.dump(state, f)
     except IOError as exc:
         log.error(u'state file could not be written: {0}', exc)
@@ -193,7 +192,7 @@ class ImportSession(object):
 
         # Normalize the paths.
         if self.paths:
-            self.paths = map(normpath, self.paths)
+            self.paths = list(map(normpath, self.paths))
 
     def _setup_logging(self, loghandler):
         logger = logging.getLogger(__name__)
@@ -251,17 +250,17 @@ class ImportSession(object):
         if duplicate:
             # Duplicate: log all three choices (skip, keep both, and trump).
             if task.should_remove_duplicates:
-                self.tag_log('duplicate-replace', paths)
+                self.tag_log(u'duplicate-replace', paths)
             elif task.choice_flag in (action.ASIS, action.APPLY):
-                self.tag_log('duplicate-keep', paths)
+                self.tag_log(u'duplicate-keep', paths)
             elif task.choice_flag is (action.SKIP):
-                self.tag_log('duplicate-skip', paths)
+                self.tag_log(u'duplicate-skip', paths)
         else:
             # Non-duplicate: log "skip" and "asis" choices.
             if task.choice_flag is action.ASIS:
-                self.tag_log('asis', paths)
+                self.tag_log(u'asis', paths)
             elif task.choice_flag is action.SKIP:
-                self.tag_log('skip', paths)
+                self.tag_log(u'skip', paths)
 
     def should_resume(self, path):
         raise NotImplementedError
@@ -332,7 +331,7 @@ class ImportSession(object):
         been imported in a previous session.
         """
         if self.is_resuming(toppath) \
-           and all(map(lambda p: progress_element(toppath, p), paths)):
+           and all([progress_element(toppath, p) for p in paths]):
             return True
         if self.config['incremental'] \
            and tuple(paths) in self.history_dirs:
@@ -500,7 +499,7 @@ class ImportTask(BaseImportTask):
         if self.choice_flag in (action.ASIS, action.RETAG):
             return list(self.items)
         elif self.choice_flag == action.APPLY:
-            return self.match.mapping.keys()
+            return list(self.match.mapping.keys())
         else:
             assert False
 
@@ -641,7 +640,7 @@ class ImportTask(BaseImportTask):
                 changes['comp'] = False
             else:
                 # VA.
-                changes['albumartist'] = config['va_name'].get(unicode)
+                changes['albumartist'] = config['va_name'].as_str()
                 changes['comp'] = True
 
         elif self.choice_flag in (action.APPLY, action.RETAG):
@@ -1150,7 +1149,7 @@ class ImportTaskFactory(object):
         if not (self.session.config['move'] or
                 self.session.config['copy']):
             log.warn(u"Archive importing requires either "
-                     "'copy' or 'move' to be enabled.")
+                     u"'copy' or 'move' to be enabled.")
             return
 
         log.debug(u'Extracting archive: {0}',
@@ -1325,10 +1324,32 @@ def resolve_duplicates(session, task):
     if task.choice_flag in (action.ASIS, action.APPLY, action.RETAG):
         found_duplicates = task.find_duplicates(session.lib)
         if found_duplicates:
-            log.debug('found duplicates: {}'.format(
+            log.debug(u'found duplicates: {}'.format(
                 [o.id for o in found_duplicates]
             ))
-            session.resolve_duplicate(task, found_duplicates)
+
+            # Get the default action to follow from config.
+            duplicate_action = config['import']['duplicate_action'].as_choice({
+                u'skip': u's',
+                u'keep': u'k',
+                u'remove': u'r',
+                u'ask': u'a',
+            })
+            log.debug(u'default action for duplicates: {0}', duplicate_action)
+
+            if duplicate_action == u's':
+                # Skip new.
+                task.set_choice(action.SKIP)
+            elif duplicate_action == u'k':
+                # Keep both. Do nothing; leave the choice intact.
+                pass
+            elif duplicate_action == u'r':
+                # Remove old.
+                task.should_remove_duplicates = True
+            else:
+                # No default action set; ask the session.
+                session.resolve_duplicate(task, found_duplicates)
+
             session.log_choice(task, True)
 
 
@@ -1342,7 +1363,7 @@ def import_asis(session, task):
     if task.skip:
         return
 
-    log.info('{}', displayable_path(task.paths))
+    log.info(u'{}', displayable_path(task.paths))
     task.set_choice(action.ASIS)
     apply_choice(session, task)
 
@@ -1440,8 +1461,8 @@ def group_albums(session):
         task = pipeline.multiple(tasks)
 
 
-MULTIDISC_MARKERS = (r'dis[ck]', r'cd')
-MULTIDISC_PAT_FMT = r'^(.*%s[\W_]*)\d'
+MULTIDISC_MARKERS = (br'dis[ck]', br'cd')
+MULTIDISC_PAT_FMT = br'^(.*%s[\W_]*)\d'
 
 
 def albums_in_dir(path):
@@ -1452,8 +1473,11 @@ def albums_in_dir(path):
     """
     collapse_pat = collapse_paths = collapse_items = None
     ignore = config['ignore'].as_str_seq()
+    ignore_hidden = config['ignore_hidden'].get(bool)
 
-    for root, dirs, files in sorted_walk(path, ignore=ignore, logger=log):
+    for root, dirs, files in sorted_walk(path, ignore=ignore,
+                                         ignore_hidden=ignore_hidden,
+                                         logger=log):
         items = [os.path.join(root, f) for f in files]
         # If we're currently collapsing the constituent directories in a
         # multi-disc album, check whether we should continue collapsing
@@ -1481,7 +1505,9 @@ def albums_in_dir(path):
         # named in this way.
         start_collapsing = False
         for marker in MULTIDISC_MARKERS:
-            marker_pat = re.compile(MULTIDISC_PAT_FMT % marker, re.I)
+            # We're using replace on %s due to lack of .format() on bytestrings
+            p = MULTIDISC_PAT_FMT.replace(b'%s', marker)
+            marker_pat = re.compile(p, re.I)
             match = marker_pat.match(os.path.basename(root))
 
             # Is this directory the root of a nested multi-disc album?
@@ -1490,13 +1516,16 @@ def albums_in_dir(path):
                 start_collapsing = True
                 subdir_pat = None
                 for subdir in dirs:
+                    subdir = util.bytestring_path(subdir)
                     # The first directory dictates the pattern for
                     # the remaining directories.
                     if not subdir_pat:
                         match = marker_pat.match(subdir)
                         if match:
+                            match_group = re.escape(match.group(1))
                             subdir_pat = re.compile(
-                                br'^%s\d' % re.escape(match.group(1)), re.I
+                                b''.join([b'^', match_group, br'\d']),
+                                re.I
                             )
                         else:
                             start_collapsing = False
@@ -1518,7 +1547,8 @@ def albums_in_dir(path):
                 # Set the current pattern to match directories with the same
                 # prefix as this one, followed by a digit.
                 collapse_pat = re.compile(
-                    br'^%s\d' % re.escape(match.group(1)), re.I
+                    b''.join([b'^', re.escape(match.group(1)), br'\d']),
+                    re.I
                 )
                 break
 

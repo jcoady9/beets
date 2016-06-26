@@ -15,14 +15,14 @@
 
 """The core data store and collection logic for beets.
 """
-from __future__ import (division, absolute_import, print_function,
-                        unicode_literals)
+from __future__ import division, absolute_import, print_function
 
 import os
 import sys
 import unicodedata
 import time
 import re
+import six
 from unidecode import unidecode
 
 from beets import logging
@@ -35,6 +35,8 @@ from beets import dbcore
 from beets.dbcore import types
 import beets
 
+if not six.PY2:
+    buffer = memoryview  # sqlite won't accept memoryview in python 2
 
 log = logging.getLogger('beets')
 
@@ -49,7 +51,7 @@ class PathQuery(dbcore.FieldQuery):
     and case-sensitive otherwise.
     """
 
-    escape_re = re.compile(r'[\\_%]')
+    escape_re = re.compile(br'[\\_%]')
     escape_char = b'\\'
 
     def __init__(self, field, pattern, fast=True, case_sensitive=None):
@@ -86,8 +88,14 @@ class PathQuery(dbcore.FieldQuery):
         colon = query_part.find(':')
         if colon != -1:
             query_part = query_part[:colon]
-        return (os.sep in query_part and
-                os.path.exists(syspath(normpath(query_part))))
+
+        # Test both `sep` and `altsep` (i.e., both slash and backslash on
+        # Windows).
+        return (
+            (os.sep in query_part or
+             (os.altsep and os.altsep in query_part)) and
+            os.path.exists(syspath(normpath(query_part)))
+        )
 
     def match(self, item):
         path = item.path if self.case_sensitive else item.path.lower()
@@ -118,14 +126,15 @@ class DateType(types.Float):
     query = dbcore.query.DateQuery
 
     def format(self, value):
-        return time.strftime(beets.config['time_format'].get(unicode),
+        return time.strftime(beets.config['time_format'].as_str(),
                              time.localtime(value or 0))
 
     def parse(self, string):
         try:
             # Try a formatted date string.
             return time.mktime(
-                time.strptime(string, beets.config['time_format'].get(unicode))
+                time.strptime(string,
+                              beets.config['time_format'].as_str())
             )
         except ValueError:
             # Fall back to a plain timestamp number.
@@ -147,13 +156,13 @@ class PathType(types.Type):
         return normpath(bytestring_path(string))
 
     def normalize(self, value):
-        if isinstance(value, unicode):
+        if isinstance(value, six.text_type):
             # Paths stored internally as encoded bytes.
             return bytestring_path(value)
 
         elif isinstance(value, buffer):
-            # SQLite must store bytestings as buffers to avoid decoding.
-            # We unwrap buffers to bytes.
+            # SQLite must store bytestings as buffers/memoryview
+            # to avoid decoding. We unwrap buffers to bytes.
             return bytes(value)
 
         else:
@@ -255,7 +264,7 @@ PF_KEY_DEFAULT = 'default'
 
 
 # Exceptions.
-
+@six.python_2_unicode_compatible
 class FileOperationError(Exception):
     """Indicates an error when interacting with a file on disk.
     Possibilities include an unsupported media type, a permissions
@@ -269,35 +278,39 @@ class FileOperationError(Exception):
         self.path = path
         self.reason = reason
 
-    def __unicode__(self):
+    def text(self):
         """Get a string representing the error. Describes both the
         underlying reason and the file path in question.
         """
         return u'{0}: {1}'.format(
             util.displayable_path(self.path),
-            unicode(self.reason)
+            six.text_type(self.reason)
         )
 
-    def __str__(self):
-        return unicode(self).encode('utf8')
+    # define __str__ as text to avoid infinite loop on super() calls
+    # with @six.python_2_unicode_compatible
+    __str__ = text
 
 
+@six.python_2_unicode_compatible
 class ReadError(FileOperationError):
     """An error while reading a file (i.e. in `Item.read`).
     """
-    def __unicode__(self):
-        return u'error reading ' + super(ReadError, self).__unicode__()
+    def __str__(self):
+        return u'error reading ' + super(ReadError, self).text()
 
 
+@six.python_2_unicode_compatible
 class WriteError(FileOperationError):
     """An error while writing a file (i.e. in `Item.write`).
     """
-    def __unicode__(self):
-        return u'error writing ' + super(WriteError, self).__unicode__()
+    def __str__(self):
+        return u'error writing ' + super(WriteError, self).text()
 
 
 # Item and Album model classes.
 
+@six.python_2_unicode_compatible
 class LibModel(dbcore.Model):
     """Shared concrete functionality for Items and Albums.
     """
@@ -325,7 +338,7 @@ class LibModel(dbcore.Model):
 
     def __format__(self, spec):
         if not spec:
-            spec = beets.config[self._format_config_key].get(unicode)
+            spec = beets.config[self._format_config_key].as_str()
         result = self.evaluate_template(spec)
         if isinstance(spec, bytes):
             # if spec is a byte string then we must return a one as well
@@ -334,10 +347,10 @@ class LibModel(dbcore.Model):
             return result
 
     def __str__(self):
-        return format(self).encode('utf8')
-
-    def __unicode__(self):
         return format(self)
+
+    def __bytes__(self):
+        return self.__str__().encode('utf-8')
 
 
 class FormattedItemMapping(dbcore.db.FormattedMapping):
@@ -511,7 +524,7 @@ class Item(LibModel):
         """
         # Encode unicode paths and read buffers.
         if key == 'path':
-            if isinstance(value, unicode):
+            if isinstance(value, six.text_type):
                 value = bytestring_path(value)
             elif isinstance(value, buffer):
                 value = bytes(value)
@@ -560,7 +573,7 @@ class Item(LibModel):
 
         for key in self._media_fields:
             value = getattr(mediafile, key)
-            if isinstance(value, (int, long)):
+            if isinstance(value, six.integer_types):
                 if value.bit_length() > 63:
                     value = 0
             self[key] = value
@@ -627,7 +640,7 @@ class Item(LibModel):
             self.write(path, tags)
             return True
         except FileOperationError as exc:
-            log.error("{0}", exc)
+            log.error(u"{0}", exc)
             return False
 
     def try_sync(self, write, move, with_album=True):
@@ -647,7 +660,7 @@ class Item(LibModel):
         if move:
             # Check whether this file is inside the library directory.
             if self._db and self._db.directory in util.ancestry(self.path):
-                log.debug('moving {0} to synchronize path',
+                log.debug(u'moving {0} to synchronize path',
                           util.displayable_path(self.path))
                 self.move(with_album=with_album)
         self.store()
@@ -796,7 +809,7 @@ class Item(LibModel):
                 if query == PF_KEY_DEFAULT:
                     break
             else:
-                assert False, "no default path format"
+                assert False, u"no default path format"
         if isinstance(path_format, Template):
             subpath_tmpl = path_format
         else:
@@ -826,12 +839,15 @@ class Item(LibModel):
         if fellback:
             # Print an error message if legalization fell back to
             # default replacements because of the maximum length.
-            log.warning('Fell back to default replacements when naming '
-                        'file {}. Configure replacements to avoid lengthening '
-                        'the filename.', subpath)
+            log.warning(
+                u'Fell back to default replacements when naming '
+                u'file {}. Configure replacements to avoid lengthening '
+                u'the filename.',
+                subpath
+            )
 
         if fragment:
-            return subpath
+            return util.as_string(subpath)
         else:
             return normpath(os.path.join(basedir, subpath))
 
@@ -1016,7 +1032,7 @@ class Album(LibModel):
         """
         item = self.items().get()
         if not item:
-            raise ValueError('empty album')
+            raise ValueError(u'empty album')
         return os.path.dirname(item.path)
 
     def _albumtotal(self):
@@ -1052,7 +1068,8 @@ class Album(LibModel):
         image = bytestring_path(image)
         item_dir = item_dir or self.item_dir()
 
-        filename_tmpl = Template(beets.config['art_filename'].get(unicode))
+        filename_tmpl = Template(
+            beets.config['art_filename'].as_str())
         subpath = self.evaluate_template(filename_tmpl, True)
         if beets.config['asciify_paths']:
             subpath = unidecode(subpath)
@@ -1170,7 +1187,8 @@ def parse_query_string(s, model_cls):
 
     The string is split into components using shell-like syntax.
     """
-    assert isinstance(s, unicode), "Query is not unicode: {0!r}".format(s)
+    message = u"Query is not unicode: {0!r}".format(s)
+    assert isinstance(s, six.text_type), message
     try:
         parts = util.shlex_split(s)
     except ValueError as exc:
@@ -1246,7 +1264,7 @@ class Library(dbcore.Database):
         # Parse the query, if necessary.
         try:
             parsed_sort = None
-            if isinstance(query, basestring):
+            if isinstance(query, six.string_types):
                 query, parsed_sort = parse_query_string(query, model_cls)
             elif isinstance(query, (list, tuple)):
                 query, parsed_sort = parse_query_parts(query, model_cls)
@@ -1323,7 +1341,7 @@ class DefaultTemplateFunctions(object):
     additional context to the functions -- specifically, the Item being
     evaluated.
     """
-    _prefix = b'tmpl_'
+    _prefix = 'tmpl_'
 
     def __init__(self, item=None, lib=None):
         """Parametrize the functions. If `item` or `lib` is None, then
@@ -1396,7 +1414,7 @@ class DefaultTemplateFunctions(object):
     def tmpl_time(s, fmt):
         """Format a time value using `strftime`.
         """
-        cur_fmt = beets.config['time_format'].get(unicode)
+        cur_fmt = beets.config['time_format'].as_str()
         return time.strftime(fmt, time.strptime(s, cur_fmt))
 
     def tmpl_aunique(self, keys=None, disam=None):
@@ -1463,6 +1481,35 @@ class DefaultTemplateFunctions(object):
         res = u' [{0}]'.format(disam_value)
         self.lib._memotable[memokey] = res
         return res
+
+    @staticmethod
+    def tmpl_first(s, count=1, skip=0, sep=u'; ', join_str=u'; '):
+        """ Gets the item(s) from x to y in a string separated by something
+        and join then with something
+
+        :param s: the string
+        :param count: The number of items included
+        :param skip: The number of items skipped
+        :param sep: the separator. Usually is '; ' (default) or '/ '
+        :param join_str: the string which will join the items, default '; '.
+        """
+        skip = int(skip)
+        count = skip + int(count)
+        return join_str.join(s.split(sep)[skip:count])
+
+    def tmpl_ifdef(self, field, trueval=u'', falseval=u''):
+        """ If field exists return trueval or the field (default)
+        otherwise, emit return falseval (if provided).
+
+        :param field: The name of the field
+        :param trueval: The string if the condition is true
+        :param falseval: The string if the condition is false
+        :return: The string, based on condition
+        """
+        if self.item.formatted().get(field):
+            return trueval if trueval else self.item.formatted().get(field)
+        else:
+            return falseval
 
 
 # Get the name of tmpl_* functions in the above class.

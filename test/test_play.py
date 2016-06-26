@@ -15,8 +15,7 @@
 
 """Tests for the play plugin"""
 
-from __future__ import (division, absolute_import, print_function,
-                        unicode_literals)
+from __future__ import division, absolute_import, print_function
 
 import os
 
@@ -33,7 +32,7 @@ class PlayPluginTest(unittest.TestCase, TestHelper):
     def setUp(self):
         self.setup_beets()
         self.load_plugins('play')
-        self.item = self.add_item(album='a nice älbum', title='aNiceTitle')
+        self.item = self.add_item(album=u'a nice älbum', title=u'aNiceTitle')
         self.lib.add_album([self.item])
         self.open_patcher = patch('beetsplug.play.util.interactive_open')
         self.open_mock = self.open_patcher.start()
@@ -45,33 +44,36 @@ class PlayPluginTest(unittest.TestCase, TestHelper):
         self.unload_plugins()
 
     def do_test(self, args=('title:aNiceTitle',), expected_cmd='echo',
-                expected_playlist='{}\n'):
+                expected_playlist=None):
         self.run_command('play', *args)
 
         self.open_mock.assert_called_once_with(ANY, expected_cmd)
-        exp_playlist = expected_playlist.format(self.item.path.decode('utf-8'))
-        with open(self.open_mock.call_args[0][0][0], 'r') as playlist:
+        expected_playlist = expected_playlist or self.item.path.decode('utf-8')
+        exp_playlist = expected_playlist + u'\n'
+        with open(self.open_mock.call_args[0][0][0], 'rb') as playlist:
             self.assertEqual(exp_playlist, playlist.read().decode('utf-8'))
 
     def test_basic(self):
         self.do_test()
 
     def test_album_option(self):
-        self.do_test(['-a', 'nice'])
+        self.do_test([u'-a', u'nice'])
 
     def test_args_option(self):
-        self.do_test(['-A', 'foo', 'title:aNiceTitle'], 'echo foo')
+        self.do_test([u'-A', u'foo', u'title:aNiceTitle'], u'echo foo')
 
     def test_args_option_in_middle(self):
         self.config['play']['command'] = 'echo $args other'
 
-        self.do_test(['-A', 'foo', 'title:aNiceTitle'], 'echo foo other')
+        self.do_test([u'-A', u'foo', u'title:aNiceTitle'], u'echo foo other')
 
     def test_relative_to(self):
         self.config['play']['command'] = 'echo'
         self.config['play']['relative_to'] = '/something'
 
-        self.do_test(expected_cmd='echo', expected_playlist='..{}\n')
+        path = os.path.relpath(self.item.path, b'/something')
+        playlist = path.decode('utf8')
+        self.do_test(expected_cmd='echo', expected_playlist=playlist)
 
     def test_use_folders(self):
         self.config['play']['command'] = None
@@ -79,20 +81,20 @@ class PlayPluginTest(unittest.TestCase, TestHelper):
         self.run_command('play', '-a', 'nice')
 
         self.open_mock.assert_called_once_with(ANY, open_anything())
-        playlist = open(self.open_mock.call_args[0][0][0], 'r')
-        self.assertEqual('{}\n'.format(
+        playlist = open(self.open_mock.call_args[0][0][0], 'rb')
+        self.assertEqual(u'{}\n'.format(
             os.path.dirname(self.item.path.decode('utf-8'))),
             playlist.read().decode('utf-8'))
 
     def test_raw(self):
         self.config['play']['raw'] = True
 
-        self.run_command('play', 'nice')
+        self.run_command(u'play', u'nice')
 
         self.open_mock.assert_called_once_with([self.item.path], 'echo')
 
     def test_not_found(self):
-        self.run_command('play', 'not found')
+        self.run_command(u'play', u'not found')
 
         self.open_mock.assert_not_called()
 
@@ -101,28 +103,28 @@ class PlayPluginTest(unittest.TestCase, TestHelper):
         self.add_item(title='another NiceTitle')
 
         with control_stdin("a"):
-            self.run_command('play', 'nice')
+            self.run_command(u'play', u'nice')
 
         self.open_mock.assert_not_called()
 
     def test_warning_threshold_backwards_compat(self):
         self.config['play']['warning_treshold'] = 1
-        self.add_item(title='another NiceTitle')
+        self.add_item(title=u'another NiceTitle')
 
         with control_stdin("a"):
-            self.run_command('play', 'nice')
+            self.run_command(u'play', u'nice')
 
         self.open_mock.assert_not_called()
 
     def test_command_failed(self):
-        self.open_mock.side_effect = OSError("some reason")
+        self.open_mock.side_effect = OSError(u"some reason")
 
         with self.assertRaises(UserError):
-            self.run_command('play', 'title:aNiceTitle')
+            self.run_command(u'play', u'title:aNiceTitle')
 
 
 def suite():
     return unittest.TestLoader().loadTestsFromName(__name__)
 
-if __name__ == b'__main__':
+if __name__ == '__main__':
     unittest.main(defaultTest='suite')
