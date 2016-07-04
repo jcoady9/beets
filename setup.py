@@ -56,7 +56,7 @@ if 'sdist' in sys.argv:
 
 setup(
     name='beets',
-    version='1.3.20',
+    version='1.4.0',
     description='music tagger and library organizer',
     author='Adrian Sampson',
     author_email='adrian@radbox.org',
@@ -87,14 +87,14 @@ setup(
 
     install_requires=[
         'six',
-        'enum34>=1.0.4',
-        'mutagen>=1.27',
+        'mutagen>=1.31',
         'munkres',
         'unidecode',
         'musicbrainzngs>=0.4',
         'pyyaml',
         'jellyfish',
-    ] + (['colorama'] if (sys.platform == 'win32') else []),
+    ] + (['colorama'] if (sys.platform == 'win32') else []) +
+        (['enum34>=1.0.4'] if sys.version_info < (3, 4, 0) else []),
 
     tests_require=[
         'beautifulsoup4',

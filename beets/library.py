@@ -26,7 +26,7 @@ import six
 from unidecode import unidecode
 
 from beets import logging
-from beets.mediafile import MediaFile, MutagenError, UnreadableFileError
+from beets.mediafile import MediaFile, UnreadableFileError
 from beets import plugins
 from beets import util
 from beets.util import bytestring_path, syspath, normpath, samefile
@@ -35,8 +35,14 @@ from beets import dbcore
 from beets.dbcore import types
 import beets
 
-if not six.PY2:
-    buffer = memoryview  # sqlite won't accept memoryview in python 2
+# To use the SQLite "blob" type, it doesn't suffice to provide a byte
+# string; SQLite treats that as encoded text. Wrapping it in a `buffer` or a
+# `memoryview`, depending on the Python version, tells it that we
+# actually mean non-text data.
+if six.PY2:
+    BLOB_TYPE = buffer  # noqa ignore=F821
+else:
+    BLOB_TYPE = memoryview
 
 log = logging.getLogger('beets')
 
@@ -103,16 +109,16 @@ class PathQuery(dbcore.FieldQuery):
 
     def col_clause(self):
         if self.case_sensitive:
-            file_blob = buffer(self.file_path)
-            dir_blob = buffer(self.dir_path)
+            file_blob = BLOB_TYPE(self.file_path)
+            dir_blob = BLOB_TYPE(self.dir_path)
             return '({0} = ?) || (substr({0}, 1, ?) = ?)'.format(self.field), \
                    (file_blob, len(dir_blob), dir_blob)
 
         escape = lambda m: self.escape_char + m.group(0)
         dir_pattern = self.escape_re.sub(escape, self.dir_path)
-        dir_blob = buffer(dir_pattern + b'%')
+        dir_blob = BLOB_TYPE(dir_pattern + b'%')
         file_pattern = self.escape_re.sub(escape, self.file_path)
-        file_blob = buffer(file_pattern)
+        file_blob = BLOB_TYPE(file_pattern)
         return '({0} LIKE ? ESCAPE ?) || ({0} LIKE ? ESCAPE ?)'.format(
             self.field), (file_blob, self.escape_char, dir_blob,
                           self.escape_char)
@@ -160,9 +166,8 @@ class PathType(types.Type):
             # Paths stored internally as encoded bytes.
             return bytestring_path(value)
 
-        elif isinstance(value, buffer):
-            # SQLite must store bytestings as buffers/memoryview
-            # to avoid decoding. We unwrap buffers to bytes.
+        elif isinstance(value, BLOB_TYPE):
+            # We unwrap buffers to bytes.
             return bytes(value)
 
         else:
@@ -173,7 +178,7 @@ class PathType(types.Type):
 
     def to_sql(self, value):
         if isinstance(value, bytes):
-            value = buffer(value)
+            value = BLOB_TYPE(value)
         return value
 
 
@@ -526,7 +531,7 @@ class Item(LibModel):
         if key == 'path':
             if isinstance(value, six.text_type):
                 value = bytestring_path(value)
-            elif isinstance(value, buffer):
+            elif isinstance(value, BLOB_TYPE):
                 value = bytes(value)
 
         if key in MediaFile.fields():
@@ -568,7 +573,7 @@ class Item(LibModel):
             read_path = normpath(read_path)
         try:
             mediafile = MediaFile(syspath(read_path))
-        except (OSError, IOError, UnreadableFileError) as exc:
+        except UnreadableFileError as exc:
             raise ReadError(read_path, exc)
 
         for key in self._media_fields:
@@ -615,14 +620,14 @@ class Item(LibModel):
         try:
             mediafile = MediaFile(syspath(path),
                                   id3v23=beets.config['id3v23'].get(bool))
-        except (OSError, IOError, UnreadableFileError) as exc:
+        except UnreadableFileError as exc:
             raise ReadError(self.path, exc)
 
         # Write the tags to the file.
         mediafile.update(item_tags)
         try:
             mediafile.save()
-        except (OSError, IOError, MutagenError) as exc:
+        except UnreadableFileError as exc:
             raise WriteError(self.path, exc)
 
         # The file has a new mtime.
@@ -1208,8 +1213,6 @@ class Library(dbcore.Database):
                  path_formats=((PF_KEY_DEFAULT,
                                '$artist/$album/$track $title'),),
                  replacements=None):
-        if path != ':memory:':
-            self.path = bytestring_path(normpath(path))
         super(Library, self).__init__(path)
 
         self.directory = bytestring_path(normpath(directory))

@@ -29,7 +29,7 @@ from test import _common
 from test._common import unittest
 from beets.mediafile import MediaFile, MediaField, Image, \
     MP3DescStorageStyle, StorageStyle, MP4StorageStyle, \
-    ASFStorageStyle, ImageType, CoverArtField
+    ASFStorageStyle, ImageType, CoverArtField, UnreadableFileError
 from beets.library import Item
 from beets.plugins import BeetsPlugin
 from beets.util import bytestring_path
@@ -299,7 +299,7 @@ class GenreListTestMixin(object):
 
 
 field_extension = MediaField(
-    MP3DescStorageStyle('customtag'),
+    MP3DescStorageStyle(u'customtag'),
     MP4StorageStyle('----:com.apple.iTunes:customtag'),
     StorageStyle('customtag'),
     ASFStorageStyle('customtag'),
@@ -312,43 +312,50 @@ class ExtendedFieldTestMixin(object):
         plugin = BeetsPlugin()
         plugin.add_media_field('customtag', field_extension)
 
-        mediafile = self._mediafile_fixture('empty')
-        mediafile.customtag = u'F#'
-        mediafile.save()
+        try:
+            mediafile = self._mediafile_fixture('empty')
+            mediafile.customtag = u'F#'
+            mediafile.save()
 
-        mediafile = MediaFile(mediafile.path)
-        self.assertEqual(mediafile.customtag, u'F#')
-        delattr(MediaFile, 'customtag')
-        Item._media_fields.remove('customtag')
+            mediafile = MediaFile(mediafile.path)
+            self.assertEqual(mediafile.customtag, u'F#')
+
+        finally:
+            delattr(MediaFile, 'customtag')
+            Item._media_fields.remove('customtag')
 
     def test_write_extended_tag_from_item(self):
         plugin = BeetsPlugin()
         plugin.add_media_field('customtag', field_extension)
 
-        mediafile = self._mediafile_fixture('empty')
-        self.assertIsNone(mediafile.customtag)
+        try:
+            mediafile = self._mediafile_fixture('empty')
+            self.assertIsNone(mediafile.customtag)
 
-        item = Item(path=mediafile.path, customtag=u'Gb')
-        item.write()
-        mediafile = MediaFile(mediafile.path)
-        self.assertEqual(mediafile.customtag, u'Gb')
+            item = Item(path=mediafile.path, customtag=u'Gb')
+            item.write()
+            mediafile = MediaFile(mediafile.path)
+            self.assertEqual(mediafile.customtag, u'Gb')
 
-        delattr(MediaFile, 'customtag')
-        Item._media_fields.remove('customtag')
+        finally:
+            delattr(MediaFile, 'customtag')
+            Item._media_fields.remove('customtag')
 
     def test_read_flexible_attribute_from_file(self):
         plugin = BeetsPlugin()
         plugin.add_media_field('customtag', field_extension)
 
-        mediafile = self._mediafile_fixture('empty')
-        mediafile.update({'customtag': u'F#'})
-        mediafile.save()
+        try:
+            mediafile = self._mediafile_fixture('empty')
+            mediafile.update({'customtag': u'F#'})
+            mediafile.save()
 
-        item = Item.from_path(mediafile.path)
-        self.assertEqual(item['customtag'], u'F#')
+            item = Item.from_path(mediafile.path)
+            self.assertEqual(item['customtag'], u'F#')
 
-        delattr(MediaFile, 'customtag')
-        Item._media_fields.remove('customtag')
+        finally:
+            delattr(MediaFile, 'customtag')
+            Item._media_fields.remove('customtag')
 
     def test_invalid_descriptor(self):
         with self.assertRaises(ValueError) as cm:
@@ -449,11 +456,32 @@ class ReadWriteTestBase(ArtTestMixin, GenreListTestMixin,
     ]
 
     def setUp(self):
-        self.temp_dir = tempfile.mkdtemp()
+        self.temp_dir = bytestring_path(tempfile.mkdtemp())
 
     def tearDown(self):
         if os.path.isdir(self.temp_dir):
             shutil.rmtree(self.temp_dir)
+
+    def test_read_nonexisting(self):
+        mediafile = self._mediafile_fixture('full')
+        os.remove(mediafile.path)
+        self.assertRaises(UnreadableFileError, MediaFile, mediafile.path)
+
+    def test_save_nonexisting(self):
+        mediafile = self._mediafile_fixture('full')
+        os.remove(mediafile.path)
+        try:
+            mediafile.save()
+        except UnreadableFileError:
+            pass
+
+    def test_delete_nonexisting(self):
+        mediafile = self._mediafile_fixture('full')
+        os.remove(mediafile.path)
+        try:
+            mediafile.delete()
+        except UnreadableFileError:
+            pass
 
     def test_read_audio_properties(self):
         mediafile = self._mediafile_fixture('full')

@@ -52,8 +52,8 @@ def temp_file_for(path):
     specified path.
     """
     ext = os.path.splitext(path)[1]
-    with NamedTemporaryFile(suffix=ext, delete=False) as f:
-        return f.name
+    with NamedTemporaryFile(suffix=util.py3_path(ext), delete=False) as f:
+        return util.bytestring_path(f.name)
 
 
 def pil_resize(maxwidth, path_in, path_out=None):

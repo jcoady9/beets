@@ -21,6 +21,7 @@ import sys
 import os
 import tempfile
 import shutil
+import six
 import unittest
 from contextlib import contextmanager
 
@@ -161,15 +162,19 @@ class TestCase(unittest.TestCase, Assertions):
 
         # Direct paths to a temporary directory. Tests can also use this
         # temporary directory.
-        self.temp_dir = tempfile.mkdtemp()
-        beets.config['statefile'] = os.path.join(self.temp_dir, 'state.pickle')
-        beets.config['library'] = os.path.join(self.temp_dir, 'library.db')
-        beets.config['directory'] = os.path.join(self.temp_dir, 'libdir')
+        self.temp_dir = util.bytestring_path(tempfile.mkdtemp())
+
+        beets.config['statefile'] = \
+            util.py3_path(os.path.join(self.temp_dir, b'state.pickle'))
+        beets.config['library'] = \
+            util.py3_path(os.path.join(self.temp_dir, b'library.db'))
+        beets.config['directory'] = \
+            util.py3_path(os.path.join(self.temp_dir, b'libdir'))
 
         # Set $HOME, which is used by confit's `config_dir()` to create
         # directories.
         self._old_home = os.environ.get('HOME')
-        os.environ['HOME'] = self.temp_dir
+        os.environ['HOME'] = util.py3_path(self.temp_dir)
 
         # Initialize, but don't install, a DummyIO.
         self.io = DummyIO()
@@ -252,7 +257,13 @@ class DummyOut(object):
         self.buf.append(s)
 
     def get(self):
-        return b''.join(self.buf)
+        if six.PY2:
+            return b''.join(self.buf)
+        else:
+            return ''.join(self.buf)
+
+    def flush(self):
+        self.clear()
 
     def clear(self):
         self.buf = []
@@ -267,7 +278,10 @@ class DummyIn(object):
         self.out = out
 
     def add(self, s):
-        self.buf.append(s + b'\n')
+        if six.PY2:
+            self.buf.append(s + b'\n')
+        else:
+            self.buf.append(s + '\n')
 
     def readline(self):
         if not self.buf:

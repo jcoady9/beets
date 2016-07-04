@@ -122,9 +122,12 @@ def _arg_encoding():
 
 def decargs(arglist):
     """Given a list of command-line argument bytestrings, attempts to
-    decode them to Unicode strings.
+    decode them to Unicode strings when running under Python 2.
     """
-    return [s.decode(_arg_encoding()) for s in arglist]
+    if six.PY2:
+        return [s.decode(_arg_encoding()) for s in arglist]
+    else:
+        return arglist
 
 
 def print_(*strings, **kwargs):
@@ -132,24 +135,22 @@ def print_(*strings, **kwargs):
     is not in the terminal's encoding's character set, just silently
     replaces it.
 
-    If the arguments are strings then they're expected to share the same
-    type: either bytes or unicode.
+    The arguments must be Unicode strings: `unicode` on Python 2; `str` on
+    Python 3.
 
     The `end` keyword argument behaves similarly to the built-in `print`
     (it defaults to a newline). The value should have the same string
     type as the arguments.
     """
-    end = kwargs.get('end')
+    if not strings:
+        strings = [u'']
+    assert isinstance(strings[0], six.text_type)
 
-    if not strings or isinstance(strings[0], six.text_type):
-        txt = u' '.join(strings)
-        txt += u'\n' if end is None else end
-    else:
-        txt = b' '.join(strings)
-        txt += b'\n' if end is None else end
+    txt = u' '.join(strings)
+    txt += kwargs.get('end', u'\n')
 
-    # Always send bytes to the stdout stream.
-    if isinstance(txt, six.text_type):
+    # Send bytes to the stdout stream on Python 2.
+    if six.PY2:
         txt = txt.encode(_out_encoding(), 'replace')
 
     sys.stdout.write(txt)
@@ -204,14 +205,17 @@ def input_(prompt=None):
     # use print_() explicitly to display prompts.
     # http://bugs.python.org/issue1927
     if prompt:
-        print_(prompt, end=' ')
+        print_(prompt, end=u' ')
 
     try:
         resp = input()
     except EOFError:
         raise UserError(u'stdin stream ended while input required')
 
-    return resp.decode(_in_encoding(), 'ignore')
+    if six.PY2:
+        return resp.decode(_in_encoding(), 'ignore')
+    else:
+        return resp
 
 
 def input_options(options, require=False, prompt=None, fallback_prompt=None,
@@ -1102,12 +1106,18 @@ def _load_plugins(config):
     """Load the plugins specified in the configuration.
     """
     paths = config['pluginpath'].get(confit.StrSeq(split=False))
-    paths = list(map(util.normpath, paths))
+    paths = [util.normpath(p) for p in paths]
     log.debug(u'plugin paths: {0}', util.displayable_path(paths))
 
+    # On Python 3, the search paths need to be unicode.
+    paths = [util.py3_path(p) for p in paths]
+
+    # Extend the `beetsplug` package to include the plugin paths.
     import beetsplug
     beetsplug.__path__ = paths + beetsplug.__path__
-    # For backwards compatibility.
+
+    # For backwards compatibility, also support plugin paths that
+    # *contain* a `beetsplug` package.
     sys.path += paths
 
     plugins.load_plugins(config['plugins'].as_str_seq())
@@ -1198,7 +1208,7 @@ def _configure(options):
 def _open_library(config):
     """Create a new library instance from the configuration.
     """
-    dbpath = config['library'].as_filename()
+    dbpath = util.bytestring_path(config['library'].as_filename())
     try:
         lib = library.Library(
             dbpath,

@@ -169,7 +169,7 @@ class TestHelper(object):
         Make sure you call ``teardown_beets()`` afterwards.
         """
         self.create_temp_dir()
-        os.environ['BEETSDIR'] = self.temp_dir
+        os.environ['BEETSDIR'] = util.py3_path(self.temp_dir)
 
         self.config = beets.config
         self.config.clear()
@@ -182,10 +182,12 @@ class TestHelper(object):
 
         self.libdir = os.path.join(self.temp_dir, b'libdir')
         os.mkdir(self.libdir)
-        self.config['directory'] = self.libdir
+        self.config['directory'] = util.py3_path(self.libdir)
 
         if disk:
-            dbpath = self.config['library'].as_filename()
+            dbpath = util.bytestring_path(
+                self.config['library'].as_filename()
+            )
         else:
             dbpath = ':memory:'
         self.lib = Library(dbpath, self.libdir)
@@ -429,7 +431,7 @@ class TestHelper(object):
     def run_with_output(self, *args):
         with capture_stdout() as out:
             self.run_command(*args)
-        return out.getvalue().decode('utf-8')
+        return util.text_string(out.getvalue())
 
     # Safe file operations
 
@@ -437,7 +439,8 @@ class TestHelper(object):
         """Create a temporary directory and assign it into
         `self.temp_dir`. Call `remove_temp_dir` later to delete it.
         """
-        self.temp_dir = mkdtemp()
+        temp_dir = mkdtemp()
+        self.temp_dir = util.bytestring_path(temp_dir)
 
     def remove_temp_dir(self):
         """Delete the temporary directory created by `create_temp_dir`.

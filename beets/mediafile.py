@@ -269,14 +269,14 @@ def _sc_encode(gain, peak):
     # from the gain ratio using a reference value of 1000 units. We also
     # enforce the maximum value here, which is equivalent to about
     # -18.2dB.
-    g1 = min(round((10 ** (gain / -10)) * 1000), 65534)
+    g1 = int(min(round((10 ** (gain / -10)) * 1000), 65534))
     # Same as above, except our reference level is 2500 units.
-    g2 = min(round((10 ** (gain / -10)) * 2500), 65534)
+    g2 = int(min(round((10 ** (gain / -10)) * 2500), 65534))
 
     # The purpose of these values are unknown, but they also seem to be
     # unused so we just use zero.
     uk = 0
-    values = (g1, g1, g2, g2, uk, uk, peak, peak, uk, uk)
+    values = (g1, g1, g2, g2, uk, uk, int(peak), int(peak), uk, uk)
     return (u' %08X' * 10) % values
 
 
@@ -351,6 +351,9 @@ class Image(object):
                     the binary data
     """
     def __init__(self, data, desc=None, type=None):
+        assert isinstance(data, bytes)
+        if desc is not None:
+            assert isinstance(desc, six.text_type)
         self.data = data
         self.desc = desc
         if isinstance(type, int):
@@ -722,7 +725,7 @@ class MP3ListStorageStyle(ListStorageStyle, MP3StorageStyle):
 
 
 class MP3UFIDStorageStyle(MP3StorageStyle):
-    """Store data in a UFID ID3 frame with a particular owner.
+    """Store string data in a UFID ID3 frame with a particular owner.
     """
     def __init__(self, owner, **kwargs):
         self.owner = owner
@@ -735,6 +738,10 @@ class MP3UFIDStorageStyle(MP3StorageStyle):
             return None
 
     def store(self, mutagen_file, value):
+        # This field type stores text data as encoded data.
+        assert isinstance(value, six.text_type)
+        value = value.encode('utf8')
+
         frames = mutagen_file.tags.getall(self.key)
         for frame in frames:
             # Replace existing frame data.
@@ -751,6 +758,7 @@ class MP3DescStorageStyle(MP3StorageStyle):
     selected based its ``desc`` field.
     """
     def __init__(self, desc=u'', key='TXXX', **kwargs):
+        assert isinstance(desc, six.text_type)
         self.description = desc
         super(MP3DescStorageStyle, self).__init__(key=key, **kwargs)
 
@@ -770,7 +778,7 @@ class MP3DescStorageStyle(MP3StorageStyle):
         # Try creating a new frame.
         if not found:
             frame = mutagen.id3.Frames[self.key](
-                desc=bytes(self.description),
+                desc=self.description,
                 text=value,
                 encoding=mutagen.id3.Encoding.UTF8,
             )
@@ -866,7 +874,7 @@ class MP3ImageStorageStyle(ListStorageStyle, MP3StorageStyle):
         frame = mutagen.id3.Frames[self.key]()
         frame.data = image.data
         frame.mime = image.mime_type
-        frame.desc = (image.desc or u'').encode('utf8')
+        frame.desc = image.desc or u''
         frame.encoding = 3  # UTF-8 encoding of desc
         frame.type = image.type_index
         return frame
@@ -947,7 +955,11 @@ class VorbisImageStorageStyle(ListStorageStyle):
         pic.type = image.type_index
         pic.mime = image.mime_type
         pic.desc = image.desc or u''
-        return base64.b64encode(pic.write())
+
+        # Encoding with base64 returns bytes on both Python 2 and 3.
+        # Mutagen requires the data to be a Unicode string, so we decode
+        # it before passing it along.
+        return base64.b64encode(pic.write()).decode('ascii')
 
 
 class FlacImageStorageStyle(ListStorageStyle):
@@ -1026,8 +1038,11 @@ class APEv2ImageStorageStyle(ListStorageStyle):
             try:
                 frame = mutagen_file[cover_tag]
                 text_delimiter_index = frame.value.find(b'\x00')
-                comment = frame.value[0:text_delimiter_index] \
-                    if text_delimiter_index > 0 else None
+                if text_delimiter_index > 0:
+                    comment = frame.value[0:text_delimiter_index]
+                    comment = comment.decode('utf8', 'replace')
+                else:
+                    comment = None
                 image_data = frame.value[text_delimiter_index + 1:]
                 images.append(Image(data=image_data, type=cover_type,
                                     desc=comment))
@@ -1346,32 +1361,12 @@ class MediaFile(object):
         path = syspath(path)
         self.path = path
 
-        unreadable_exc = (
-            mutagen.mp3.error,
-            mutagen.id3.error,
-            mutagen.flac.error,
-            mutagen.monkeysaudio.MonkeysAudioHeaderError,
-            mutagen.mp4.error,
-            mutagen.oggopus.error,
-            mutagen.oggvorbis.error,
-            mutagen.ogg.error,
-            mutagen.asf.error,
-            mutagen.apev2.error,
-            mutagen.aiff.error,
-        )
         try:
             self.mgfile = mutagen.File(path)
-        except unreadable_exc as exc:
-            log.debug(u'header parsing failed: {0}', six.text_type(exc))
+        except (mutagen.MutagenError, IOError) as exc:
+            # Mutagen <1.33 could raise IOError
+            log.debug(u'parsing failed: {0}', six.text_type(exc))
             raise UnreadableFileError(path)
-        except IOError as exc:
-            if type(exc) == IOError:
-                # This is a base IOError, not a subclass from Mutagen or
-                # anywhere else.
-                raise
-            else:
-                log.debug(u'{}', traceback.format_exc())
-                raise MutagenError(path, exc)
         except Exception as exc:
             # Isolate bugs in Mutagen.
             log.debug(u'{}', traceback.format_exc())
@@ -1384,20 +1379,10 @@ class MediaFile(object):
         elif (type(self.mgfile).__name__ == 'M4A' or
               type(self.mgfile).__name__ == 'MP4'):
             info = self.mgfile.info
-            if hasattr(info, 'codec'):
-                if info.codec and info.codec.startswith('alac'):
-                    self.type = 'alac'
-                else:
-                    self.type = 'aac'
+            if info.codec and info.codec.startswith('alac'):
+                self.type = 'alac'
             else:
-                # This hack differentiates AAC and ALAC on versions of
-                # Mutagen < 1.26. Once Mutagen > 1.26 is out and
-                # required by beets, we can remove this.
-                if hasattr(self.mgfile.info, 'bitrate') and \
-                   self.mgfile.info.bitrate > 0:
-                    self.type = 'aac'
-                else:
-                    self.type = 'alac'
+                self.type = 'aac'
         elif (type(self.mgfile).__name__ == 'ID3' or
               type(self.mgfile).__name__ == 'MP3'):
             self.type = 'mp3'
@@ -1428,7 +1413,8 @@ class MediaFile(object):
         self.id3v23 = id3v23 and self.type == 'mp3'
 
     def save(self):
-        """Write the object's tags back to the file.
+        """Write the object's tags back to the file. May
+        throw `UnreadableFileError`.
         """
         # Possibly save the tags to ID3v2.3.
         kwargs = {}
@@ -1440,27 +1426,34 @@ class MediaFile(object):
             id3.update_to_v23()
             kwargs['v2_version'] = 3
 
-        # Isolate bugs in Mutagen.
         try:
             self.mgfile.save(**kwargs)
-        except (IOError, OSError):
-            # Propagate these through: they don't represent Mutagen bugs.
-            raise
+        except (mutagen.MutagenError, IOError) as exc:
+            # Mutagen <1.33 could raise IOError
+            log.debug(u'saving failed: {0}', six.text_type(exc))
+            raise UnreadableFileError(self.path)
         except Exception as exc:
+            # Isolate bugs in Mutagen.
             log.debug(u'{}', traceback.format_exc())
             log.error(u'uncaught Mutagen exception in save: {0}', exc)
             raise MutagenError(self.path, exc)
 
     def delete(self):
-        """Remove the current metadata tag from the file.
+        """Remove the current metadata tag from the file. May
+        throw `UnreadableFileError`.
         """
+
         try:
             self.mgfile.delete()
-        except NotImplementedError:
-            # For Mutagen types that don't support deletion (notably,
-            # ASF), just delete each tag individually.
-            for tag in self.mgfile.keys():
-                del self.mgfile[tag]
+        except (mutagen.MutagenError, IOError) as exc:
+            # Mutagen <1.33 could raise IOError.
+            log.debug(u'deleting failed: {0}', six.text_type(exc))
+            raise UnreadableFileError(self.path)
+        except Exception as exc:
+            # Isolate bugs in Mutagen.
+            log.debug(u'{}', traceback.format_exc())
+            log.error(u'uncaught Mutagen exception in delete: {0}', exc)
+            raise MutagenError(self.path, exc)
 
     # Convenient access to the set of available fields.
 
@@ -1718,7 +1711,7 @@ class MediaFile(object):
         ASFStorageStyle('WM/Language'),
     )
     country = MediaField(
-        MP3DescStorageStyle('MusicBrainz Album Release Country'),
+        MP3DescStorageStyle(u'MusicBrainz Album Release Country'),
         MP4StorageStyle('----:com.apple.iTunes:MusicBrainz '
                         'Album Release Country'),
         StorageStyle('RELEASECOUNTRY'),
@@ -1968,13 +1961,6 @@ class MediaFile(object):
     @property
     def channels(self):
         """The number of channels in the audio (an int)."""
-        if isinstance(self.mgfile.info, mutagen.mp3.MPEGInfo):
-            return {
-                mutagen.mp3.STEREO: 2,
-                mutagen.mp3.JOINTSTEREO: 2,
-                mutagen.mp3.DUALCHANNEL: 2,
-                mutagen.mp3.MONO: 1,
-            }[self.mgfile.info.mode]
         if hasattr(self.mgfile.info, 'channels'):
             return self.mgfile.info.channels
         return 0

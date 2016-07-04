@@ -1,18 +1,48 @@
 Changelog
 =========
 
-1.3.20 (in development)
------------------------
+1.4.0 (in development)
+----------------------
 
-New features:
+Version 1.4 is our first step toward supporting Python 3 in addition to Python
+2. We're not quite there yet, but thanks mainly to the heroic efforts of
+:user:`jrobeson`, we're on our way. A few basic commands work now, and we're
+working to bring full support over the next few releases.
 
-* :doc:`/plugins/web`: Added an option to show the items of an album and a
-  'path' tag to the json outpu of a file which shows the relative path to the
-  file. :bug:`2050`
+Specifically, if you package beets for distribution, here's what you'll want
+to know:
 
-Other fixes:
+* This version of beets now depends on the `six`_ library.
+* We also bumped our minimum required version of `Mutagen`_ to 1.31 (from
+  1.27).
+* Please don't package beets as a Python 3 application *yet*, even though some
+  things may appear to work under Python 3.4 and later.
 
-* :doc:`/plugins/web`: Normalized the json output
+There's a small new feature:
+
+* :doc:`/plugins/web`: Added an ``expand`` option to show the items of an
+  album and a ``path`` field to the JSON output of a file which shows the
+  filled-out path template for each file. :bug:`2050`
+
+And there are a few bug fixes too:
+
+* :doc:`/plugins/web`: The JSON output is no longer pretty-printed (for a
+  space savings). :bug:`2050`
+* :doc:`/plugins/permissions`: Fix a regression in the previous release where
+  the plugin would always fail to set permissions (and log a warning).
+  :bug:`2089`
+* :doc:`/plugins/beatport`: Use track numbers from Beatport (instead of
+  determining them from the order of tracks) and set the `medium_index`
+  value.
+* With :ref:`per_disc_numbering` enabled, some metadata sources (notably, the
+  :doc:`/plugins/beatport`) would not set the track number at all. This is
+  fixed. :bug:`2085`
+
+The last release, 1.3.19, also erroneously reported its version as "1.3.18"
+when you typed ``beet version``. This has been corrected.
+
+.. _six: https://pythonhosted.org/six/
+
 
 1.3.19 (June 25, 2016)
 ----------------------

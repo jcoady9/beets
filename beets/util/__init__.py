@@ -496,7 +496,8 @@ def unique_path(path):
         num = 0
     while True:
         num += 1
-        new_path = b'%s.%i%s' % (base, num, ext)
+        suffix = u'.{}'.format(num).encode() + ext
+        new_path = base + suffix
         if not os.path.exists(new_path):
             return new_path
 
@@ -624,6 +625,24 @@ def legalize_path(path, replacements, length, extension, fragment):
     return second_stage_path, retruncated
 
 
+def py3_path(path):
+    """Convert a bytestring path to Unicode on Python 3 only. On Python
+    2, return the bytestring path unchanged.
+
+    This helps deal with APIs on Python 3 that *only* accept Unicode
+    (i.e., `str` objects). I philosophically disagree with this
+    decision, because paths are sadly bytes on Unix, but that's the way
+    it is. So this function helps us "smuggle" the true bytes data
+    through APIs that took Python 3's Unicode mandate too seriously.
+    """
+    if isinstance(path, six.text_type):
+        return path
+    assert isinstance(path, bytes)
+    if six.PY2:
+        return path
+    return os.fsdecode(path)
+
+
 def str2bool(value):
     """Returns a boolean reflecting a human-entered string."""
     return value.lower() in (u'yes', u'1', u'true', u't', u'y')
@@ -635,7 +654,7 @@ def as_string(value):
     """
     buffer_types = memoryview
     if six.PY2:
-        buffer_types = (buffer, memoryview)
+        buffer_types = (buffer, memoryview)  # noqa ignore=F821
 
     if value is None:
         return u''
@@ -645,6 +664,19 @@ def as_string(value):
         return value.decode('utf8', 'ignore')
     else:
         return six.text_type(value)
+
+
+def text_string(value, encoding='utf8'):
+    """Convert a string, which can either be bytes or unicode, to
+    unicode.
+
+    Text (unicode) is left untouched; bytes are decoded. This is useful
+    to convert from a "native string" (bytes on Python 2, str on Python
+    3) to a consistently unicode value.
+    """
+    if isinstance(value, bytes):
+        return value.decode(encoding)
+    return value
 
 
 def plurality(objs):
@@ -766,8 +798,7 @@ def shlex_split(s):
     Raise `ValueError` if the string is not a well-formed shell string.
     This is a workaround for a bug in some versions of Python.
     """
-    if isinstance(s, bytes):
-        # Shlex works fine.
+    if not six.PY2 or isinstance(s, bytes):  # Shlex works fine.
         return shlex.split(s)
 
     elif isinstance(s, six.text_type):
